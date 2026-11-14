@@ -97,7 +97,7 @@ function watchdogScript() {
     '          $known = ""',
     '          if (Test-Path -LiteralPath $published) { $known = (Get-Content -LiteralPath $published -Raw).Trim() }',
     '          if ($link -ne $known) {',
-    '            Set-Content -LiteralPath $published -Value $link -NoNewline',
+    '            [System.IO.File]::WriteAllText($published, $link)',
     '            [System.IO.File]::WriteAllText($linkFile, "[InternetShortcut]" + [char]13 + [char]10 + "URL=" + $link + [char]13 + [char]10)',
     '          }',
     '        }',
