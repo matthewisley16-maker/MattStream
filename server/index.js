@@ -12,6 +12,7 @@ const { spawn } = require('child_process');
 const { Store } = require('./store');
 const { resolveFfmpeg, ffmpegWorks, buildPlayArgs } = require('./media');
 const { scanLibrary, sortTitle, VIDEO_EXT, prettySize } = require('./scan');
+const tmdb = require('./tmdb');
 
 const APP_ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = process.env.MATTSTREAM_DATA
@@ -33,6 +34,26 @@ const probeStore = new Store(path.join(DATA_DIR, 'probes.json'), () => ({}));
 const progressStore = new Store(path.join(DATA_DIR, 'progress.json'), () => ({}));
 const metadataStore = new Store(path.join(DATA_DIR, 'metadata.json'), () => ({}));
 const ART_DIR = path.join(DATA_DIR, 'art');
+const DEFAULTS_FILE = path.join(APP_ROOT, 'config', 'defaults.json');
+
+// The server this installation offers as its default library. It is a plain
+// config file the owner can edit or delete; other people point their app at
+// their own server instead.
+function readDefaults() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(DEFAULTS_FILE, 'utf8'));
+    const server = parsed && parsed.defaultServer;
+    if (!server || !server.url) return { defaultServer: null };
+    return {
+      defaultServer: {
+        name: String(server.name || 'My Library'),
+        url: String(server.url),
+      },
+    };
+  } catch (err) {
+    return { defaultServer: null };
+  }
+}
 
 const FFMPEG = resolveFfmpeg(APP_ROOT);
 
@@ -552,8 +573,14 @@ async function handleApi(req, res, url) {
       uptime: Math.round((Date.now() - state.startedAt) / 1000),
       admin: isAdmin(req),
       serverName: os.hostname(),
+      tmdb: Boolean(tmdb.apiKey(configStore)),
       log: state.log.slice(-20),
     });
+  }
+
+  // Which server this installation treats as its own library.
+  if (route === '/api/defaults') {
+    return sendJson(res, 200, readDefaults());
   }
 
   if (route === '/api/library') {
@@ -1001,6 +1028,124 @@ async function handleApi(req, res, url) {
     reindex();
     log('new ' + kind + ' for "' + item.title + '"');
     return sendJson(res, 200, { ok: true, kind, url: '/api/art/' + encodeURIComponent(item.id) + '?k=' + kind });
+  }
+
+  // Identify a file against real metadata and show the candidates.
+  if (route === '/api/match/search' && req.method === 'POST') {
+    if (!requireAdmin(res, req)) return;
+    const body = await readBody(req);
+    const item = byId.get(String(body.id || ''));
+    if (!item) return sendJson(res, 404, { error: 'That video is no longer in the library.' });
+
+    const key = tmdb.apiKey(configStore);
+    if (!key) {
+      return sendJson(res, 400, {
+        error: 'Add a TMDB API key to fetch real titles and posters.',
+        needsKey: true,
+      });
+    }
+    const guessed = tmdb.guessFromFilename(item);
+    const query = String(body.query || guessed.title || item.title || '').trim();
+    if (!query) return sendJson(res, 400, { error: 'Give MattStream a name to search for.' });
+
+    try {
+      const candidates = await tmdb.search({ key, query, year: guessed.year, kind: item.kind });
+      return sendJson(res, 200, { query, candidates });
+    } catch (err) {
+      return sendJson(res, 502, { error: err.message });
+    }
+  }
+
+  // The TMDB key lives on the server, never in the page.
+  if (route === '/api/match/key' && req.method === 'POST') {
+    if (!requireAdmin(res, req)) return;
+    const body = await readBody(req);
+    const key = String(body.key || '').trim();
+    if (!/^[a-f0-9]{32}$/i.test(key)) {
+      return sendJson(res, 400, { error: 'That does not look like a TMDB v3 key (32 letters and numbers).' });
+    }
+    configStore.update((data) => {
+      data.tmdbKey = key;
+    });
+    configStore.flush();
+    log('saved a TMDB key for metadata matching');
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // Save the chosen match: that entry's own title, year, plot and artwork.
+  if (route === '/api/match/apply' && req.method === 'POST') {
+    if (!requireAdmin(res, req)) return;
+    const body = await readBody(req);
+    const item = byId.get(String(body.id || ''));
+    if (!item) return sendJson(res, 404, { error: 'That video is no longer in the library.' });
+
+    const key = tmdb.apiKey(configStore);
+    if (!key) return sendJson(res, 400, { error: 'Add a TMDB API key first.', needsKey: true });
+
+    let chosen;
+    try {
+      chosen = await tmdb.details({ key, tmdbId: body.tmdbId, mediaType: body.mediaType });
+    } catch (err) {
+      return sendJson(res, 502, { error: err.message });
+    }
+    if (!chosen || !chosen.title) return sendJson(res, 502, { error: 'That match had no usable metadata.' });
+
+    const applyToSeries = body.scope === 'series' && item.kind === 'episode' && item.series;
+    const targets = applyToSeries
+      ? (libraryStore.read().items || []).filter(
+          (entry) => entry.kind === 'episode' && entry.series === item.series
+        )
+      : [item];
+    if (!targets.length) targets.push(item);
+
+    await fsp.mkdir(ART_DIR, { recursive: true });
+    const poster = await tmdb
+      .saveImage(chosen.posterUrl, path.join(ART_DIR, 'match-' + item.id + '-poster.jpg'))
+      .catch((err) => {
+        log('poster download failed: ' + err.message);
+        return null;
+      });
+    const backdrop = await tmdb
+      .saveImage(chosen.backdropUrl, path.join(ART_DIR, 'match-' + item.id + '-backdrop.jpg'))
+      .catch(() => null);
+
+    const patch = {
+      overview: chosen.overview,
+      tmdbId: chosen.tmdbId,
+      mediaType: chosen.mediaType,
+      matchedAt: Date.now(),
+    };
+    if (chosen.year) patch.year = chosen.year;
+    if (chosen.runtime) patch.runtime = chosen.runtime;
+    if (chosen.genres && chosen.genres.length) patch.genres = chosen.genres;
+    if (poster) patch.posterPath = poster;
+    if (backdrop) patch.backdropPath = backdrop;
+
+    const ids = new Set(targets.map((entry) => entry.id));
+    metadataStore.update((data) => {
+      for (const target of targets) {
+        const stored = Object.assign({}, data[target.path.toLowerCase()] || {});
+        Object.assign(stored, patch);
+        if (target.kind === 'episode') stored.series = chosen.title;
+        else stored.title = chosen.title;
+        data[target.path.toLowerCase()] = stored;
+      }
+    });
+    metadataStore.flush();
+
+    libraryStore.update((data) => {
+      for (const entry of data.items || []) {
+        if (!ids.has(entry.id)) continue;
+        const override = Object.assign({}, patch);
+        if (entry.kind === 'episode') override.series = chosen.title;
+        else override.title = chosen.title;
+        applyOverride(entry, override);
+      }
+    });
+    libraryStore.flush();
+    reindex();
+    log('matched "' + (item.kind === 'episode' ? item.series : item.title) + '" to ' + chosen.title);
+    return sendJson(res, 200, { ok: true, matched: chosen.title, items: targets.length });
   }
 
   return sendJson(res, 404, { error: 'Unknown endpoint' });

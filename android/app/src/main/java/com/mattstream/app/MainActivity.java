@@ -35,6 +35,10 @@ public class MainActivity extends Activity {
     private static final String KEY_SERVER = "server";
     private static final int DEFAULT_PORT = 8096;
 
+    // The library this build opens with. Anyone else can type their own address
+    // on this screen, and it is remembered from then on.
+    private static final String DEFAULT_SERVER = "http://192.168.25.146:8096";
+
     private FrameLayout root;
     private TvWebView web;
     private View setupView;
@@ -54,7 +58,7 @@ public class MainActivity extends Activity {
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         serverUrl = prefs.getString(KEY_SERVER, "");
         if (serverUrl == null || serverUrl.isEmpty()) {
-            showSetup("Enter the address MattStream shows in the desktop app.");
+            showSetup("Your home library is filled in below. Tap Connect while this device is on the same Wi-Fi.");
         } else {
             loadServer(serverUrl);
         }
@@ -102,6 +106,7 @@ public class MainActivity extends Activity {
         input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         input.setImeOptions(EditorInfo.IME_ACTION_GO);
         if (serverUrl != null && !serverUrl.isEmpty()) input.setText(serverUrl);
+        else input.setText(DEFAULT_SERVER);
         column.addView(input, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 

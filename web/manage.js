@@ -107,7 +107,8 @@ function openServersDialog(focusKey) {
       'p',
       'hint',
       'MattStream runs on the computer that hosts your media. Point this device at that address - a LAN address ' +
-        'like http://192.168.1.24:8096, not localhost - and the library, artwork and playback all come from it.'
+        'like http://192.168.1.24:8096, not localhost - and the library, artwork and playback all come from it. ' +
+        'Each person keeps their own servers; nothing is merged.'
     )
   );
 
@@ -180,6 +181,23 @@ function openServersDialog(focusKey) {
       }
     });
     row.appendChild(connect);
+
+    const isDefault = server.id === defaultServerId();
+    if (isDefault) {
+      row.classList.add('is-default');
+      info.appendChild(el('span', 'lib-default', 'Default library'));
+    } else {
+      const makeDefault = el('button', 'icon-btn', 'Set as default');
+      makeDefault.type = 'button';
+      makeDefault.addEventListener('click', () => {
+        setDefaultServerId(server.id);
+        toast(server.name + ' is now your default library');
+        closeDialog();
+        openServersDialog();
+        refreshChip();
+      });
+      row.appendChild(makeDefault);
+    }
 
     const edit = el('button', 'icon-btn', 'Edit');
     edit.type = 'button';
@@ -649,13 +667,280 @@ function openDeleteDialog(item) {
   setTimeout(() => input.focus(), 60);
 }
 
+/* ---------------- default library + first run ---------------- */
+
+const DEFAULT_SERVER_KEY = 'mattstream-default-server';
+
+function defaultServerId() {
+  try {
+    return localStorage.getItem(DEFAULT_SERVER_KEY) || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+function setDefaultServerId(id) {
+  try {
+    localStorage.setItem(DEFAULT_SERVER_KEY, id);
+  } catch (err) {
+    /* private mode: the default just will not persist */
+  }
+}
+
+function defaultServer() {
+  return serverById(defaultServerId());
+}
+
+// The server this installation ships as its own library (config/defaults.json).
+async function readDefaultConfig() {
+  try {
+    const data = await api('/api/defaults');
+    return (data && data.defaultServer) || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function seedDefaultServer() {
+  const wanted = await readDefaultConfig();
+  if (!wanted || !wanted.url) return null;
+  const list = readServers();
+  const existing = list.find((entry) => normalizeUrl(entry.url) === normalizeUrl(wanted.url));
+  if (existing) {
+    if (!defaultServerId()) setDefaultServerId(existing.id);
+    return existing;
+  }
+  const server = {
+    id: 'srv-default',
+    name: wanted.name || 'My Library',
+    url: normalizeUrl(wanted.url) + '/',
+    key: '',
+    added: Date.now(),
+    seeded: true,
+  };
+  list.push(server);
+  writeServers(list);
+  if (!defaultServerId()) setDefaultServerId(server.id);
+  return server;
+}
+
+/* ---------------- connection chip ---------------- */
+
+let chipTimer = null;
+
+function renderChip(mode, label, detail) {
+  const chip = $('#statusChip');
+  if (!chip) return;
+  chip.dataset.state = mode;
+  const dotEl = chip.querySelector('.dot');
+  if (dotEl) dotEl.className = 'dot is-' + mode;
+  const text = chip.querySelector('.chip-name');
+  if (text) text.textContent = label;
+  const stateText = chip.querySelector('.chip-state');
+  if (stateText) {
+    stateText.textContent = mode === 'online' ? 'Online' : mode === 'connecting' ? 'Connecting' : 'Offline';
+  }
+  chip.title = detail || chip.title;
+}
+
+function chipName() {
+  const preferred = defaultServer();
+  if (preferred && preferred.name) return preferred.name;
+  return (state.status && state.status.serverName) || 'This computer';
+}
+
+async function refreshChip() {
+  renderChip('connecting', chipName());
+  const result = await testServer(location.origin);
+  if (result.online) {
+    renderChip('online', chipName(), location.origin);
+    if (state.status && result.status) state.status = Object.assign({}, state.status, result.status);
+  } else {
+    renderChip('offline', chipName(), result.error + ' - ' + location.origin);
+  }
+}
+
+function watchConnection() {
+  if (chipTimer) return;
+  refreshChip();
+  chipTimer = setInterval(refreshChip, 15000);
+  const chip = $('#statusChip');
+  if (chip) chip.addEventListener('click', () => openServersDialog());
+  window.addEventListener('online', refreshChip);
+  window.addEventListener('offline', refreshChip);
+}
+
+/* ---------------- first run ---------------- */
+
+function showFirstRun(defaults) {
+  if ($('#firstRunLayer')) return;
+  const layer = el('div', 'dialog-layer first-run');
+  layer.id = 'firstRunLayer';
+  const card = el('div', 'dialog first-run-card');
+  card.appendChild(el('h2', null, 'Welcome to MattStream'));
+  card.appendChild(
+    el(
+      'p',
+      'hint',
+      'MattStream plays the films and shows that live on your own computer. Nothing is shared with anyone ' +
+        'unless you give them your address.'
+    )
+  );
+
+  const choices = el('div', 'first-run-choices');
+
+  // 1. Connect to an existing personal server.
+  const connectCard = el('div', 'first-run-option');
+  connectCard.appendChild(el('h3', null, 'Connect to my library'));
+  connectCard.appendChild(el('p', 'hint', 'You already run MattStream on the computer that holds your media.'));
+
+  const nameInput = document.createElement('input');
+  nameInput.className = 'text-input';
+  nameInput.placeholder = 'Server name';
+  nameInput.value = (defaults && defaults.name) || 'My Home Library';
+  connectCard.appendChild(nameInput);
+
+  const urlInput = document.createElement('input');
+  urlInput.type = 'url';
+  urlInput.className = 'text-input mono';
+  urlInput.placeholder = 'http://192.168.1.24:8096';
+  urlInput.value = (defaults && defaults.url) || '';
+  connectCard.appendChild(urlInput);
+
+  const keyInput = document.createElement('input');
+  keyInput.className = 'text-input';
+  keyInput.placeholder = 'Admin key (only if you want to manage that library)';
+  connectCard.appendChild(keyInput);
+
+  const feedback = el('p', 'hint', '');
+  connectCard.appendChild(feedback);
+
+  const actions = el('div', 'dialog-actions');
+  const testButton = el('button', 'btn is-ghost', 'Test connection');
+  testButton.type = 'button';
+  actions.appendChild(testButton);
+
+  const saveButton = el('button', 'btn is-primary', 'Save as default');
+  saveButton.type = 'button';
+  actions.appendChild(saveButton);
+  connectCard.appendChild(actions);
+
+  testButton.addEventListener('click', async () => {
+    const url = normalizeUrl(urlInput.value.trim());
+    if (!url) {
+      feedback.textContent = 'Enter the address MattStream shows on the computer with your media.';
+      return;
+    }
+    feedback.className = 'hint';
+    feedback.textContent = 'Testing ' + url + '...';
+    const result = await testServer(url);
+    if (result.online) {
+      const name = (result.status && result.status.serverName) || url;
+      feedback.className = 'hint is-online';
+      feedback.textContent =
+        'Online - ' + name + ', ' + (result.status.videos || 0) + ' items. Version ' + result.status.version + '.';
+      if (!nameInput.value.trim() || nameInput.value.trim() === 'My Home Library') nameInput.value = name;
+    } else {
+      feedback.className = 'hint is-error';
+      feedback.textContent = 'Could not reach it: ' + result.error + '. Check the address and that MattStream is running there.';
+    }
+  });
+
+  saveButton.addEventListener('click', async () => {
+    const url = normalizeUrl(urlInput.value.trim());
+    if (!url) {
+      feedback.textContent = 'Enter the server address first.';
+      return;
+    }
+    saveButton.disabled = true;
+    feedback.className = 'hint';
+    feedback.textContent = 'Checking ' + url + '...';
+    const result = await testServer(url);
+    if (!result.online) {
+      feedback.className = 'hint is-error';
+      feedback.textContent = 'That server did not answer: ' + result.error + '. Nothing was saved.';
+      saveButton.disabled = false;
+      return;
+    }
+    const list = readServers();
+    const server =
+      list.find((entry) => normalizeUrl(entry.url) === url) ||
+      { id: 'srv-' + Date.now().toString(36), name: nameInput.value.trim() || url, url: url + '/', key: '', added: Date.now() };
+    server.name = nameInput.value.trim() || server.name;
+    server.key = keyInput.value.trim() || server.key || '';
+    if (!list.includes(server)) list.push(server);
+    writeServers(list);
+    setDefaultServerId(server.id);
+    setActiveServer(server.id);
+    try {
+      localStorage.setItem('mattstream-onboarded', '1');
+    } catch (err) {
+      /* private mode */
+    }
+    if (server.key) {
+      try {
+        sessionStorage.setItem('mattstream-admin-key', server.key);
+      } catch (err) {
+        /* ignore */
+      }
+    }
+    if (!goToServer(server)) {
+      layer.remove();
+      refreshChip();
+      if (typeof refreshLibrary === 'function') refreshLibrary();
+    }
+  });
+
+  // 2. Start a library on this computer.
+  const createCard = el('div', 'first-run-option');
+  createCard.appendChild(el('h3', null, 'Create my library'));
+  createCard.appendChild(
+    el(
+      'p',
+      'hint',
+      adminState.admin
+        ? 'This computer can host your library. Add the folders that hold your films and shows and MattStream will scan them.'
+        : 'Install MattStream on the computer that holds your media, add your folders there, then come back and connect to that address. Phones and TVs stream from it over Wi-Fi.'
+    )
+  );
+  const createButton = el('button', 'btn is-ghost', adminState.admin ? 'Add my folders' : 'How do I host it?');
+  createButton.type = 'button';
+  createButton.addEventListener('click', () => {
+    if (adminState.admin) {
+      layer.remove();
+      if (typeof openFoldersDialog === 'function') openFoldersDialog();
+    } else {
+      createCard.appendChild(
+        el(
+          'p',
+          'hint',
+          'On the host computer: open MattStream, choose Library, add the folders with your videos, then use the ' +
+            'address shown in Servers here - a LAN address like http://192.168.1.24:8096, never localhost.'
+        )
+      );
+    }
+  });
+  createCard.appendChild(createButton);
+
+  choices.appendChild(connectCard);
+  choices.appendChild(createCard);
+  card.appendChild(choices);
+  layer.appendChild(card);
+  document.body.appendChild(layer);
+
+  setTimeout(() => urlInput.focus(), 80);
+}
+
+/* ---------------- boot ---------------- */
+
 /* ---------------- connection watchdog + boot ---------------- */
 
 async function initManage() {
   // Remember the server this page came from.
+  let localStatus = null;
   try {
-    const data = await api('/api/status');
-    registerCurrentServer(data.serverName);
+    localStatus = await api('/api/status');
+    registerCurrentServer(localStatus.serverName);
   } catch (err) {
     /* offline: the banner below explains it */
   }
@@ -664,18 +949,49 @@ async function initManage() {
   const serversButton = $('#serversBtn');
   if (serversButton) serversButton.addEventListener('click', () => openServersDialog());
 
-  // Reconnect to the last server when this app was opened somewhere else.
-  const active = serverById(activeServerId());
-  if (active && normalizeUrl(active.url) !== location.origin) {
+  // This installation's own default library (config/defaults.json).
+  const seeded = await seedDefaultServer();
+  const config = await readDefaultConfig();
+  watchConnection();
+
+  // Where should this device actually sit? A configured library beats an empty
+  // local server, but the computer that hosts the library talks to it directly
+  // instead of going out to its own LAN address and back.
+  const preferred = defaultServer() || serverById(activeServerId());
+  const localCount = localStatus && typeof localStatus.videos === 'number' ? localStatus.videos : 0;
+  const lanUrls = ((localStatus && localStatus.lanUrls) || []).map(normalizeUrl);
+  const preferredIsSelf = preferred ? lanUrls.includes(normalizeUrl(preferred.url)) : false;
+
+  if (preferred && !preferredIsSelf && normalizeUrl(preferred.url) !== location.origin) {
     const bounceKey = 'mattstream-bounced';
     if (!sessionStorage.getItem(bounceKey)) {
       sessionStorage.setItem(bounceKey, '1');
-      const result = await testServer(active.url);
+      const result = await testServer(preferred.url);
       if (result.online) {
-        location.href = normalizeUrl(active.url) + '/';
+        location.href = normalizeUrl(preferred.url) + '/';
         return;
       }
-      showOfflineBar(active);
+      showOfflineBar(preferred);
+      renderChip('offline', preferred.name || preferred.url, result.error);
+    }
+  }
+
+  // A device with nothing to play and no server to talk to gets set up first.
+  let onboarded = '0';
+  try {
+    onboarded = localStorage.getItem('mattstream-onboarded') || '0';
+  } catch (err) {
+    /* private mode */
+  }
+  if (!onboarded && localCount === 0 && !preferred) {
+    showFirstRun(config);
+    return;
+  }
+  if (localCount > 0 || preferred) {
+    try {
+      localStorage.setItem('mattstream-onboarded', '1');
+    } catch (err) {
+      /* ignore */
     }
   }
 

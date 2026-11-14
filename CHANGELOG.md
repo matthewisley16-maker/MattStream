@@ -10,6 +10,20 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Added
 
+- **Your own library is the default** - `config/defaults.json` names this installation's library
+  (`My Home Library` at `http://192.168.25.146:8096/`). The Windows app, the phone app and the TV app
+  open on it and stream from it; anyone else edits or removes that file and points at their own server.
+- **Multi-library, with a real connection chip** - the header shows the library you are on with
+  `Online`, `Connecting` or `Offline` and the real error when it cannot be reached. Servers offers
+  Test, Connect, Edit, Remove and **Set as default**, and one library is never merged into another.
+- **First-run setup** - a device with nothing to play is asked to *Connect to my library* (name,
+  address, admin key, Test connection, save as default) or *Create my library* (add the folders on the
+  computer that holds the files).
+- **Real metadata matching** - *Match metadata* looks the file up by name, lists the possible films or
+  shows with their own posters, and saves the one you pick as that item's title, year, plot and
+  artwork. Applying it to a show covers every episode of that show. The TMDB key is entered once and
+  kept on the server.
+
 - **Windows installer** - `MattStream-Windows-Setup.exe` is built and published with the phone and TV
   APKs. It installs per-user (no admin prompt), adds desktop and Start-menu shortcuts, and keeps the
   library in `%APPDATA%\MattStream\data`.

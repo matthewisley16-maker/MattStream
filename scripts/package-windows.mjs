@@ -23,7 +23,7 @@ await mkdir(path.join(stage, 'resources', 'app'), { recursive: true });
 await cp(electronDist, stage, { recursive: true });
 
 const appDest = path.join(stage, 'resources', 'app');
-for (const entry of ['electron', 'server', 'web', 'bin', 'package.json', 'README.md', 'icon.ico', 'start.bat', 'start.sh']) {
+for (const entry of ['electron', 'server', 'web', 'bin', 'config', 'package.json', 'README.md', 'icon.ico', 'start.bat', 'start.sh']) {
   const from = path.join(root, entry);
   if (!existsSync(from)) continue;
   await cp(from, path.join(appDest, entry), { recursive: true });

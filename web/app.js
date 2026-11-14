@@ -1050,6 +1050,14 @@ function openMovieDialog(item) {
     edit.addEventListener('click', () => openEditDialog(item));
     actions.appendChild(edit);
 
+    const matchBtn = el('button', 'btn is-ghost', 'Match metadata');
+    matchBtn.type = 'button';
+    matchBtn.title = 'Find the real title and poster for this file';
+    matchBtn.addEventListener('click', () => {
+      if (typeof openMatchDialog === 'function') openMatchDialog(item);
+    });
+    actions.appendChild(matchBtn);
+
     const posterBtn = el('button', 'btn is-ghost', 'Change poster');
     posterBtn.type = 'button';
     posterBtn.addEventListener('click', () => uploadArtwork(item, 'poster'));

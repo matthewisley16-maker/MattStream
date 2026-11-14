@@ -29,6 +29,7 @@
       "server/**/*",
       "web/**/*",
       "bin/**/*",
+      "config/**/*",
       "package.json",
       "icon.ico",
       "README.md",

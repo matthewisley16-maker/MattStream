@@ -37,6 +37,11 @@
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 11-5 5H5a7 7 0 107-7z" fill="currentColor"/></svg>
         <span>Rescan</span>
       </button>
+      <button class="status-chip" id="statusChip" type="button" title="Current library" data-state="connecting">
+        <i class="dot is-connecting"></i>
+        <span class="chip-name">This computer</span>
+        <span class="chip-state">Connecting</span>
+      </button>
       <button class="ghost-btn" id="serversBtn" title="Server connection">
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 5h16v5H4zM4 14h16v5H4z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor"/><circle cx="7.5" cy="16.5" r="1" fill="currentColor"/></svg>
         <span>Servers</span>
@@ -56,5 +61,6 @@
 
   <script src="/app.js"></script>
   <script src="/manage.js"></script>
+  <script src="/match.js"></script>
 </body>
 </html>
