@@ -1156,6 +1156,7 @@ function serveWeb(req, res, pathname) {
     '/index.html',
     '/app.js',
     '/manage.js',
+    '/match.js',
     '/styles.css',
     '/icon.svg',
     '/manifest.webmanifest',
