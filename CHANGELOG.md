@@ -10,6 +10,11 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Added
 
+- **Cast to another screen** - a film or show can be sent to any other screen with MattStream open (the
+  Android TV app, a phone, another PC). *Cast to a screen* lists the screens that are connected and
+  *Play there* opens the same video on it; playback streams from the one server, nothing is copied.
+  It runs over the tunnel too, so it needs no firewall change.
+
 - **The public link keeps itself alive** - the watchdog also restarts the tunnel if it stops, writes the current
   address to `.tools/public-url.txt` and updates a `MattStream on my phone.url` shortcut on the Desktop.
 

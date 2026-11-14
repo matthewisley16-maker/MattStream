@@ -1050,6 +1050,14 @@ function openMovieDialog(item) {
     edit.addEventListener('click', () => openEditDialog(item));
     actions.appendChild(edit);
 
+    const castBtn = el('button', 'btn is-ghost', 'Cast to a screen');
+    castBtn.type = 'button';
+    castBtn.title = 'Play this on the TV, or another screen with MattStream open';
+    castBtn.addEventListener('click', () => {
+      if (typeof openCastMenu === 'function') openCastMenu(item);
+    });
+    actions.appendChild(castBtn);
+
     const matchBtn = el('button', 'btn is-ghost', 'Match metadata');
     matchBtn.type = 'button';
     matchBtn.title = 'Find the real title and poster for this file';

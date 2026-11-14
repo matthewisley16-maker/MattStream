@@ -57,6 +57,9 @@ function readDefaults() {
 
 const FFMPEG = resolveFfmpeg(APP_ROOT);
 
+// Screens keeping a cast channel open, keyed by their client id.
+const castClients = new Map();
+
 const state = {
   scanning: false,
   scanDone: 0,
@@ -1100,6 +1103,80 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true, kind, url: '/api/art/' + encodeURIComponent(item.id) + '?k=' + kind });
   }
 
+  // ---- cast to another screen ----
+  // Each screen holds this open; a cast command is written straight down it.
+  if (route === '/api/cast/events') {
+    const clientId = String(url.searchParams.get('client') || '');
+    const name = String(url.searchParams.get('name') || 'A screen').slice(0, 40);
+    if (!clientId) return sendText(res, 400, 'Missing client');
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 3000\n\n');
+    try {
+      req.socket.setTimeout(0);
+      req.socket.setNoDelay(true);
+    } catch (err) {
+      /* older socket */
+    }
+
+    castClients.set(clientId, { id: clientId, name, res, since: Date.now() });
+    const ping = setInterval(() => {
+      try {
+        res.write(': ping\n\n');
+      } catch (err) {
+        /* the screen went away; the close handler clears it */
+      }
+    }, 20000);
+    const drop = () => {
+      clearInterval(ping);
+      const current = castClients.get(clientId);
+      if (current && current.res === res) castClients.delete(clientId);
+    };
+    req.on('close', drop);
+    req.on('error', drop);
+    res.on('close', drop);
+    return;
+  }
+
+  if (route === '/api/cast/targets') {
+    const self = String(url.searchParams.get('client') || '');
+    return sendJson(res, 200, {
+      targets: Array.from(castClients.values())
+        .filter((entry) => entry.id !== self && !entry.res.destroyed && !entry.res.writableEnded)
+        .map((entry) => ({ id: entry.id, name: entry.name })),
+    });
+  }
+
+  if (route === '/api/cast' && req.method === 'POST') {
+    if (!requireAdmin(res, req)) return;
+    const body = await readBody(req);
+    const target = castClients.get(String(body.client || ''));
+    if (!target) return sendJson(res, 404, { error: 'That screen is not connected any more.' });
+    const item = byId.get(String(body.itemId || ''));
+    if (!item) return sendJson(res, 404, { error: 'That video is no longer in the library.' });
+
+    const payload = {
+      type: 'cast',
+      itemId: item.id,
+      title: item.title,
+      from: String(body.from || ''),
+      fromName: String(body.fromName || 'MattStream').slice(0, 40),
+    };
+    try {
+      target.res.write('data: ' + JSON.stringify(payload) + '\n\n');
+    } catch (err) {
+      castClients.delete(target.id);
+      return sendJson(res, 409, { error: 'That screen dropped off - try Refresh.' });
+    }
+    log('casting "' + item.title + '" to ' + target.name);
+    return sendJson(res, 200, { ok: true, target: target.name });
+  }
+
   // Identify a file against real metadata and show the candidates.
   if (route === '/api/match/search' && req.method === 'POST') {
     if (!requireAdmin(res, req)) return;
@@ -1227,6 +1304,7 @@ function serveWeb(req, res, pathname) {
     '/app.js',
     '/manage.js',
     '/match.js',
+    '/cast.js',
     '/styles.css',
     '/icon.svg',
     '/manifest.webmanifest',
