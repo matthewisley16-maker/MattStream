@@ -114,11 +114,17 @@ async function openCastMenu(item) {
       )
     );
   } else {
+    // Two screens on one PC (the app window and a browser tab) should be told
+    // apart, otherwise they look like the same target twice.
+    const seen = {};
+    for (const target of targets) seen[target.name] = (seen[target.name] || 0) + 1;
+
     const list = el('div', 'cast-list');
     for (const target of targets) {
       const row = el('div', 'cast-row');
       const info = el('div', 'cast-info');
-      info.appendChild(el('strong', null, target.name));
+      const label = seen[target.name] > 1 ? target.name + ' #' + String(target.id).slice(-4) : target.name;
+      info.appendChild(el('strong', null, label));
       info.appendChild(el('span', 'hint', 'Connected'));
       row.appendChild(info);
 
