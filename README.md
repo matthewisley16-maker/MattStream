@@ -181,7 +181,7 @@ On a TV or phone, the same controls work from the remote: **←/→** seek 10 se
 ## Where your data lives
 
 ```
-
+mattstream/
   data/
     config.json     library folders and port
     library.json    the scanned index (deleted and rebuilt on rescan)
@@ -195,7 +195,7 @@ internet. Delete `data/` to start fresh.
 ## Project layout
 
 ```
-
+mattstream/
   electron/main.js       the desktop app: window, icons, lifecycle
   android/               Android phone + Android TV apps (Gradle, WebView client)
   scripts/package-windows.mjs  builds the portable Windows zip

@@ -4,7 +4,7 @@
 // window loads it directly - no browser, no address bar, no console window.
 const path = require('path');
 const http = require('http');
-const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain } = require('electron');
 
 const APP_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_PORT = 8096;
@@ -50,6 +50,40 @@ function probeServer(port) {
   });
 }
 
+// The page asks for these when you add videos, so picking files happens in the
+// real operating-system dialog instead of clicking through folders inside the app.
+const VIDEO_PICKER_FILTERS = [
+  {
+    name: 'Video files',
+    extensions: ['mp4', 'mkv', 'avi', 'mov', 'm4v', 'webm', 'wmv', 'flv', 'mpg', 'mpeg', 'ts', 'm2ts', 'ogv', '3gp'],
+  },
+  { name: 'All files', extensions: ['*'] },
+];
+
+async function showPicker(options) {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+  return result && !result.canceled ? result.filePaths || [] : [];
+}
+
+function registerPickerHandlers() {
+  ipcMain.handle('mattstream:pick-folder', () =>
+    showPicker({
+      title: 'Choose a folder of videos',
+      buttonLabel: 'Add this folder',
+      properties: ['openDirectory', 'createDirectory'],
+    })
+  );
+  ipcMain.handle('mattstream:pick-video-files', () =>
+    showPicker({
+      title: 'Choose video files',
+      buttonLabel: 'Add these videos',
+      properties: ['openFile', 'multiSelections'],
+      filters: VIDEO_PICKER_FILTERS,
+    })
+  );
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -62,6 +96,7 @@ function createWindow() {
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -91,6 +126,7 @@ function createWindow() {
 
 async function boot() {
   Menu.setApplicationMenu(null);
+  registerPickerHandlers();
 
   const already = await probeServer(DEFAULT_PORT);
   if (already) {

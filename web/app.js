@@ -336,11 +336,34 @@ function posterNode(artItem, title, options) {
 function makeCard(opts) {
   const card = el('button', 'card');
   card.type = 'button';
-  card.appendChild(posterNode(opts.artItem, opts.title, opts));
+  const poster = posterNode(opts.artItem, opts.title, opts);
+  // A play button sits on every poster, so a playable film never needs the
+  // details dialog opened first.
+  if (opts.onPlay) {
+    const play = el('span', 'card-play');
+    play.title = 'Play now';
+    play.setAttribute('role', 'presentation');
+    play.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>';
+    play.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      opts.onPlay();
+    });
+    poster.appendChild(play);
+  }
+  card.appendChild(poster);
   card.appendChild(el('div', 'card-title', opts.title));
   if (opts.sub) card.appendChild(el('div', 'card-sub', opts.sub));
   card.addEventListener('click', opts.onClick);
   return card;
+}
+
+// Plays the episode a show should continue from: the one in progress, else the first.
+function playShow(show) {
+  const next = show.episodes.find((episode) => progressFor(episode)) || show.episodes[0];
+  if (!next) return;
+  const watched = progressFor(next);
+  openPlayer(next, watched ? watched.position : null);
 }
 
 function railSection(title, subtitle, cards) {
@@ -511,6 +534,7 @@ function viewHome() {
             artItem: item,
             percent: watched ? watched.percent : 0,
             onClick: () => (item.kind === 'episode' ? openShowByItem(item) : openMovieDialog(item)),
+            onPlay: () => openPlayer(item, watched ? watched.position : null),
           });
         })
       )
@@ -530,6 +554,7 @@ function viewHome() {
             artItem: item,
             percent: watched ? watched.percent : 0,
             onClick: () => openMovieDialog(item),
+            onPlay: () => openPlayer(item, watched ? watched.position : null),
           });
         })
       )
@@ -547,6 +572,7 @@ function viewHome() {
             sub: show.episodes.length + ' episode' + (show.episodes.length === 1 ? '' : 's'),
             artItem: show.artItem,
             onClick: () => openShowDialog(show),
+            onPlay: () => playShow(show),
           })
         )
       )
@@ -607,6 +633,7 @@ function viewMovies() {
         artItem: item,
         percent: watched ? watched.percent : 0,
         onClick: () => openMovieDialog(item),
+        onPlay: () => openPlayer(item, watched ? watched.position : null),
       })
     );
   }
@@ -638,6 +665,7 @@ function viewSeries() {
         sub: seasonCount + ' season' + (seasonCount === 1 ? '' : 's') + ' · ' + show.episodes.length + ' ep',
         artItem: show.artItem,
         onClick: () => openShowDialog(show),
+        onPlay: () => playShow(show),
       })
     );
   }
@@ -678,6 +706,7 @@ function viewSearch() {
         sub: show.episodes.length + ' episodes',
         artItem: show.artItem,
         onClick: () => openShowDialog(show),
+        onPlay: () => playShow(show),
       })
     );
   }
@@ -690,6 +719,7 @@ function viewSearch() {
         artItem: item,
         percent: watched ? watched.percent : 0,
         onClick: () => openMovieDialog(item),
+        onPlay: () => openPlayer(item, watched ? watched.position : null),
       })
     );
   }
@@ -700,6 +730,7 @@ function viewSearch() {
         sub: 'S' + item.season + ' E' + item.episode,
         artItem: item,
         onClick: () => openPlayer(item, null),
+        onPlay: () => openPlayer(item, null),
       })
     );
   }
@@ -1197,6 +1228,101 @@ async function loadBrowse(targetPath) {
   }
 }
 
+/* ---------------- adding media ---------------- */
+
+// Adds folders or single files the desktop app picked with the real OS dialog.
+async function addPickedPaths(paths) {
+  const list = (paths || []).filter(Boolean);
+  if (!list.length) return;
+  try {
+    const result = await api('/api/libraries', { method: 'POST', body: { paths: list } });
+    const added = (result.libraries || []).length;
+    const errors = result.errors || [];
+    if (added) {
+      toast('Added ' + added + (added === 1 ? ' place' : ' places') + ' to your library - scanning now');
+      closeDialog();
+      startPolling();
+      await refreshLibrary();
+    }
+    if (errors.length) toast(errors[0].error, true);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function pickOnComputer(kind) {
+  const desktop = window.mattstreamDesktop;
+  if (!desktop) return;
+  try {
+    const paths = kind === 'files' ? await desktop.pickVideoFiles() : await desktop.pickFolder();
+    if (paths && paths.length) await addPickedPaths(paths);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+// Sends files chosen from this device to an added folder, showing the real
+// bytes as they move - no progress bar that pretends.
+function uploadFilesTo(files, libraryId, host) {
+  for (const file of files) {
+    const row = el('div', 'upload-row');
+    row.appendChild(el('span', 'upload-name', file.name + ' · ' + (file.size / 1048576).toFixed(1) + ' MB'));
+    const bar = el('div', 'progress');
+    const fill = el('i');
+    bar.appendChild(fill);
+    row.appendChild(bar);
+    const label = el('span', 'upload-state', 'Starting...');
+    row.appendChild(label);
+    host.appendChild(row);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', '/api/upload?libraryId=' + encodeURIComponent(libraryId) + '&name=' + encodeURIComponent(file.name));
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    const key = window.mattstreamServerKey ? window.mattstreamServerKey() : '';
+    if (key) xhr.setRequestHeader('X-MattStream-Key', key);
+    xhr.upload.addEventListener('progress', (event) => {
+      if (!event.lengthComputable) return;
+      const percent = Math.round((event.loaded / event.total) * 100);
+      fill.style.width = percent + '%';
+      label.textContent = percent + '%';
+    });
+    xhr.addEventListener('load', () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch (err) {
+        data = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        fill.style.width = '100%';
+        label.textContent = 'Uploaded';
+        startPolling();
+        refreshLibrary();
+      } else {
+        fill.style.background = '#ff5c72';
+        label.textContent = data.error || 'Failed';
+      }
+    });
+    xhr.addEventListener('error', () => {
+      fill.style.background = '#ff5c72';
+      label.textContent = 'Connection lost';
+    });
+    xhr.send(file);
+  }
+}
+
+function chooseFilesToUpload(libraryId, host) {
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.multiple = true;
+  picker.accept = 'video/*,.mkv,.avi,.m4v,.ts';
+  picker.addEventListener('change', () => {
+    const files = Array.from(picker.files || []);
+    if (files.length) uploadFilesTo(files, libraryId, host);
+  });
+  picker.click();
+}
+
 async function openFoldersDialog() {
   const dialog = dialogShell(true);
   const section = el('div', 'dialog-section');
@@ -1276,6 +1402,53 @@ async function openFoldersDialog() {
       hiddenList.appendChild(row);
     }
     section.appendChild(hiddenList);
+  }
+
+  const isAdmin = typeof adminState !== 'undefined' && adminState.admin;
+  const desktop = window.mattstreamDesktop;
+
+  if (isAdmin && desktop) {
+    section.appendChild(el('h3', null, 'Add videos from this computer'));
+    section.appendChild(
+      el(
+        'p',
+        'hint',
+        'Opens the normal file picker: choose a folder of films, or single video files. Nothing gets copied - MattStream reads them where they already are.'
+      )
+    );
+    const pickRow = el('div', 'add-media');
+    const pickFolderBtn = el('button', 'btn is-primary', 'Choose a folder...');
+    pickFolderBtn.type = 'button';
+    pickFolderBtn.addEventListener('click', () => pickOnComputer('folder'));
+    pickRow.appendChild(pickFolderBtn);
+    const pickFilesBtn = el('button', 'btn is-ghost', 'Choose video files...');
+    pickFilesBtn.type = 'button';
+    pickFilesBtn.addEventListener('click', () => pickOnComputer('files'));
+    pickRow.appendChild(pickFilesBtn);
+    section.appendChild(pickRow);
+  }
+
+  const uploadTargets = libraries.filter((library) => library.kind !== 'file');
+  if (isAdmin && uploadTargets.length) {
+    section.appendChild(el('h3', null, 'Upload from this device'));
+    section.appendChild(
+      el('p', 'hint', 'For files that are on this phone or another computer. They are copied into the folder you pick below, with real transfer progress.')
+    );
+    const uploadWrap = el('div', 'add-media');
+    const targetSelect = el('select', 'control');
+    for (const library of uploadTargets) {
+      const option = el('option', null, library.name + ' - ' + library.path);
+      option.value = library.id;
+      targetSelect.appendChild(option);
+    }
+    uploadWrap.appendChild(targetSelect);
+    const uploadBtn = el('button', 'btn is-primary', 'Choose files to upload...');
+    uploadBtn.type = 'button';
+    uploadWrap.appendChild(uploadBtn);
+    const progressHost = el('div', 'upload-list');
+    uploadBtn.addEventListener('click', () => chooseFilesToUpload(targetSelect.value, progressHost));
+    section.appendChild(uploadWrap);
+    section.appendChild(progressHost);
   }
 
   section.appendChild(el('h3', null, 'Add folders or videos'));
