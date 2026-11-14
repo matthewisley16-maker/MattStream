@@ -360,10 +360,14 @@ function requireAdminMessage() {
 
 function metadataIssues(item) {
   const issues = [];
-  if (!item.posterPath) issues.push('no poster');
+  // An episode's artwork is its still, not a poster.
+  if (item.kind === 'episode') {
+    if (!item.thumbPath && !item.posterPath) issues.push('no thumbnail');
+  } else if (!item.posterPath) {
+    issues.push('no poster');
+  }
   if (!item.year) issues.push('no year');
   if (!item.overview) issues.push('no description');
-  if (item.kind === 'episode' && !item.thumbPath) issues.push('no thumbnail');
   return issues;
 }
 
@@ -407,11 +411,12 @@ function viewManage() {
     row.dataset.id = item.id;
 
     const thumb = el('div', 'manage-thumb');
-    if (item.posterPath) {
+    const artKind = item.posterPath ? 'poster' : item.thumbPath ? 'thumb' : '';
+    if (artKind) {
       const img = document.createElement('img');
       img.loading = 'lazy';
       img.alt = '';
-      img.src = '/api/art/' + encodeURIComponent(item.id) + '?k=poster';
+      img.src = '/api/art/' + encodeURIComponent(item.id) + '?k=' + artKind;
       img.addEventListener('error', () => {
         img.remove();
         thumb.appendChild(el('span', 'mono', '—'));
