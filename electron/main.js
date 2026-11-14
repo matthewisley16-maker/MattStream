@@ -384,12 +384,8 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
+  // Launching it again while it lives in the tray brings the window back.
+  app.on('second-instance', () => showWindow());
 
   app.whenReady().then(boot);
 
