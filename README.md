@@ -300,3 +300,19 @@ forwards requests back to this PC.
 ## Licence
 
 MattStream's own code is MIT. The bundled FFmpeg build is GPLv3 - see `bin/FFMPEG-LICENSE.txt`.
+
+## Staying up
+
+MattStream is meant to be the thing that is always there, so it no longer stops when you close its
+window:
+
+- **Closing the window keeps serving.** The app drops to the tray; phones and TVs keep streaming.
+  Right-click the tray icon for *Open MattStream*, *Copy network address* and *Quit*.
+- **Start with Windows** - a tray switch using the normal per-user login item; it starts hidden, so
+  no window in your way at login.
+- **Restart it if it ever stops** - a tray switch that writes a hidden watchdog into your Startup
+  folder. It checks the server every 10 seconds and puts it back if it has gone. A real Quit from the
+  tray pauses the watchdog, so quitting stays quitting.
+
+Both switches are per-user and need no administrator rights. Turn them off from the same tray menu.
+Uninstalling is just `Quit MattStream` and deleting the two entries the switches made.

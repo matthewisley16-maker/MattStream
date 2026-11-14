@@ -10,6 +10,12 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Added
 
+- **MattStream stays running** - closing the window now hides it to the tray instead of stopping the
+  server, so the library keeps serving phones and TVs. The tray has *Open MattStream*, *Copy network
+  address*, *Start with Windows* and *Restart it if it ever stops*; *Quit* stops it on purpose. The
+  restart watchdog runs from the Startup folder as a hidden PowerShell loop and relaunches the app
+  within about ten seconds if it goes away.
+
 - **Cover art that already exists in the file or its `.nfo` is used** - a cover stored inside an
   MKV/MP4 is extracted as the poster, and a Kodi-style `<thumb>`/`<fanart>` URL is fetched and saved
   next to the library. A frame cut from the video is only used when neither exists.
