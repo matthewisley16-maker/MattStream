@@ -9,6 +9,7 @@ directly are served as-is with full instant seeking; anything else is repackaged
 engine that ships with the app.
 
 MattStream is its own app and shares nothing with any other project: its own folder, its own data, its own port.
+What changed in each update is written down in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

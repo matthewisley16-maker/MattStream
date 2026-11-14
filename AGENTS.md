@@ -14,6 +14,8 @@ Android phone app and an Android TV app, all clients of the same server.
 
 - Keep every change inside this repository; it must build and run on its own.
 - After any change, commit and push to `main` here. Do not leave work uncommitted.
+- Keep `CHANGELOG.md` current. Every change gets an entry under today's date, in plain language,
+  before the task counts as finished.
 - Never commit `data/`, `node_modules/`, `dist/` or `bin/ffmpeg.exe` (they are ignored on purpose).
 - No fake data anywhere: no placeholder movies, invented metadata, or a connection status the server
   did not actually report.
