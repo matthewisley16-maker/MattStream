@@ -3,4 +3,5 @@ node_modules/
 dist/
 bin/ffmpeg.exe
 bin/ffmpeg
+.tools/
 *.log
