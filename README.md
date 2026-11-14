@@ -1,147 +1,231 @@
-# anystreamsite
+# MattStream
 
-All your streaming sites in one window. Paste a site URL and it becomes a square tile in your library; click the tile and the service opens inside the app. No extra apps to install for each service, no browser tabs to hunt through.
+Your own movie platform. Add the folders where your videos live - or single files - and MattStream turns them into
+a browsable shelf with posters, films, seasons and episodes, then streams them to this computer, your TV, your
+phone or a tablet on the same network.
 
-Built for Windows, Android phones and Android TV from the same UI.
+It plays **any format**. MP4, MKV, AVI, MOV, WMV, FLV, TS, MPEG, WebM, VOB and more. Files the browser can play
+directly are served as-is with full instant seeking; anything else is repackaged or transcoded live by the FFmpeg
+engine that ships with the app.
 
-## Download
+MattStream is its own app and shares nothing with any other project: its own folder, its own data, its own port.
 
-Grab the latest build from the [releases page](https://github.com/matthewisley16-maker/anystreamsitefreebuff/releases).
+---
 
-| Build | File | For |
+## Get it onto your other devices
+
+Every push to `main` builds all three apps and drops them on the repository's **mattstream-latest**
+release page (`Releases` on GitHub):
+
+| File | What it is |
+| --- | --- |
+| `MattStream-Windows-x64.zip` | The desktop app. Unzip anywhere and run `MattStream.exe` - no installer, keeps its data in `resources\app\data`. |
+| `MattStream-phone-release.apk` | Android phone or tablet app. |
+| `MattStream-tv-release.apk` | Android TV, Fire TV and Google TV app. |
+
+On Android, install the APK ("Install unknown apps" has to be allowed for your browser or file
+manager once), open it and type the address the desktop app shows in its **Library** dialog, for example
+`192.168.1.24:8096`. It is remembered from then on, and the app runs the shelf full-screen with D-pad
+support, hardware Back and fullscreen video. If the address is wrong, it says so and asks again.
+
+The Android apps are clients - the desktop app has to be running to serve the films.
+
+Build them yourself with `node scripts/package-windows.mjs` (Windows zip) or
+`cd android && gradle assembleRelease` (APKs, needs a JDK 17 and the Android SDK).
+
+---
+
+## Start it
+
+Double-click the **MattStream** icon on your desktop, or find it in the Start menu. It opens as its own window -
+no browser tab, no address bar, no console window - and the media server starts inside the app.
+
+Press **Add videos or folders**, then either open a folder and press **Add this folder** to take everything inside
+it, or click a video file - its full path lands in the box below, and **Add this file** takes just that one
+(double-clicking a file adds it straight away). MattStream scans in the background - 24 films take a couple of
+seconds once the metadata cache is warm - and your shelf appears.
+
+Closing the app window stops the server, so keep the app open while a TV or phone is watching.
+
+From a terminal the app is `npm start`. The same code still runs headless as a plain web server:
+
+```bash
+npm start                          # the desktop app
+node server/index.js               # server only, http://localhost:8096
+node server/index.js --port=8200   # server only, on another port
+```
+
+`start.bat` opens the app too, and falls back to the browser version if Electron is missing.
+
+### Requirements
+
+Nothing to install - everything is bundled in this folder:
+
+- `node_modules/electron` is the desktop runtime. If it is ever deleted, run `npm install` to restore it.
+- FFmpeg, which does the transcoding, lives at `bin/ffmpeg.exe`.
+- Node.js 18+ is only needed for the headless server mode above; the desktop app carries its own.
+
+---
+
+## Watching from a TV, phone or tablet
+
+Open the **Library** dialog in the app: it lists the network addresses for this computer, for example
+`http://192.168.1.24:8096`. Type one of those into any browser on the same Wi-Fi.
+
+- **Android phone or tablet, iPhone, iPad** - same address. The shelf reflows to a narrow single column, tap
+targets are enlarged, and the player scrubs with a finger. Add it to the home screen (Chrome: menu → *Add to Home
+screen*) and it opens full-screen with no browser bars; everything it needs is bundled, so it works offline over
+Wi-Fi with no install from a store.
+- **Android TV, Fire TV, Google TV** - type the address into the TV's browser, or cast from a phone browser's Cast
+menu. The TV layout switches on by itself for TV, console and set-top browsers: bigger type, wider posters, more
+spacing and an always-visible focus ring. Add `?tv=1` to the address to force it on in a browser that is not
+detected, or `?tv=0` to force it off.
+- **Remote control** - the arrow keys or D-pad move a highlighted focus ring around the shelf; **OK/Enter** opens
+the highlighted film or episode, and plays or pauses once the player is open; **Back** (or `Esc`) closes the
+player or the info panel. Focus enters at the shelf, not the header, so a remote never has to hunt for it.
+- **Autoplay** - a phone may refuse to start a video with sound until the page has been touched; when that
+happens a **Tap to play** button appears over the film.
+- The app must stay open on this computer while another device watches - the server runs inside the app.
+- The server listens on all network interfaces, so it is reachable from other devices; it is not exposed to the
+  internet unless you forward the port yourself.
+- Everyone on that address shares the same library and the same watch progress.
+
+---
+
+## What it does with your files
+
+**Titles.** File names are read the way releases are named, so you do not need to rename anything:
+
+| File name | Shows up as |
+| --- | --- |
+| `The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv` | **The Matrix** (1999) |
+| `Big Movie 2021.mp4` | **Big Movie** (2021) |
+| `Show.S01E02.The.Title.1080p.mkv` | **Show** · Season 1, Episode 2, "The Title" |
+| `Show - 1x02 - The Title.avi` | **Show** · Season 1, Episode 2, "The Title" |
+| `Show/Season 2/Episode 04.mkv` | **Show** · Season 2, Episode 4 |
+
+Episodes found with the same show name are grouped into one series with season tabs.
+
+**Artwork.** No internet metadata service and no account. Drop these images next to the video and MattStream uses
+them:
+
+- `poster.jpg` / `folder.jpg` / `cover.jpg` - the tall tile (posters look best around 2:3, e.g. 600×900)
+- `fanart.jpg` / `backdrop.jpg` / `background.jpg` - the wide banner behind the hero and detail views
+
+Put one set in the show folder and every season inside it inherits them. For films, keep the image in the same
+folder as the file. Anything without artwork gets a generated poster with its title, so the shelf never looks
+broken.
+
+**Subtitles.** `.srt`, `.vtt`, `.ass` and `.ssa` tracks sitting next to the video are offered in the player menu.
+`.srt` and `.ass` are converted to WebVTT on the fly. Name them `Movie.en.srt` or `Movie.forced.srt` to get a
+language label.
+
+**Watch progress.** Playback position is stored per file, so **Continue watching** and per-episode progress bars
+survive restarts. Finishing a film removes it from the row.
+
+---
+
+## Playback: why "any format" works
+
+Each file is probed with FFmpeg when it is scanned, and MattStream picks the cheapest way to get it on screen:
+
+| Decision | When | What happens |
 | --- | --- | --- |
-| Windows | `anystreamsitev1.1.2-windows-x64-setup.exe` | Windows 10 and 11, 64-bit |
-| Android phone / tablet | `anystreamsitev1.1.3-phone.apk` | Android 6.0 and newer |
-| Android TV | `anystreamsitev1.1.3-android-tv.apk` | Android TV 6.0 and newer |
+| **Direct play** | MP4/MOV/WebM with H.264, VP8, VP9 or AV1 video and AAC/MP3/Opus/Vorbis audio | Served over HTTP with byte ranges - instant start, instant seeking, no CPU cost |
+| **Repackaged live** | H.264 video in another container (for example MKV) | Stream is copied, not re-encoded, into fragmented MP4 - seconds of CPU, no quality loss |
+| **Live transcode** | Anything else (AVI, WMV, FLV, MPEG-2, HEVC, VC-1, DTS audio...) | Re-encoded live to H.264/AAC on the fly, downscaled to 1080p only if the source is bigger |
 
-The Windows file name carries its version, platform and architecture. The Android APK names carry the app version; this build is versionCode 26, so it installs as an update over the earlier v25 APKs.
+Seeking a repackaged or transcoded stream restarts FFmpeg at that point, so the scrub bar stays responsive
+without waiting for a full conversion. The badge in the player tells you which mode a film is using.
 
-## Features
+Transcoding uses CPU. One 1080p stream is comfortable on a modern desktop; several at once on a small server will
+feel it.
 
-- **Square poster tiles** — each site's icon artwork fills the whole tile, with the site name laid over the bottom of it
-- **Any site by URL** — add Netflix, Hulu, YouTube, Twitch, iPlayer, a self-hosted server, anything
-- **Real in-app viewer** — sites open in a proper browser view, not a restricted iframe, with back, forward, reload and exit controls
-- **One view, real history** — links and pop-ups inside a site stay in that same view instead of opening a new window, so **Back** returns through the pages you just visited
-- **Video downloads on Windows** — while a site is open, the site toolbar lists unencrypted HLS and direct MP4/WebM/FLV streams, lets you pick an available HLS quality (resolution/bitrate), saves them to your Downloads folder, and remuxes HLS into MP4 with the included FFmpeg engine. DRM, encrypted and live streams are not supported
-- **Persistent sign-ins** — cookies are kept in an app profile, so you stay logged in between sessions
-- **Your library stays put** — tiles, names, categories and custom icons are saved on the device
-- **Three layouts** — Grid (poster tiles), Bold (larger posters) and Minimal (a compact list)
-- **Three tile sizes** — Small, Medium and Large; Large uses tiles around 317 px wide with 172 px icons
-- **Dark and light themes** with five accent colours
-- **Start-up splash with an opening sound**, plus a soft tap sound on buttons and tiles
-- **Launch animations**, switchable in Settings
-- **Search** your library from the top bar
-- **Storage controls** — clear cached pages, or clear cookies to sign out of every site
-- **Remote friendly on TV** — native D-pad handling in the library and inside opened sites, a visible focus ring and extra large tiles; **OK** selects the highlighted tile, link or button
-- **Two TV site controls** — choose focus navigation or a D-pad-controlled mouse cursor inside opened sites. In focus mode, **Up** at the top of the page or **Menu** moves into the native Back / Forward / Reload / Exit bar; **Down** returns to the page. Hold **OK** for one second on a library tile to open its Edit / Remove menu.
+---
 
-## Windows 10 / 11 (64-bit)
+## Managing the library
 
-1. Download `anystreamsitev1.1.2-windows-x64-setup.exe`.
-2. Run it. The installer is not code-signed, so SmartScreen may say "Windows protected your PC" — choose **More info**, then **Run anyway**.
-3. It installs for the current user and adds a desktop shortcut and Start menu entry.
-4. Open anystreamsite, paste a URL such as `netflix.com` into the box, and press **Add to library**.
-5. Click a tile to open the site in the app. Use the bar at the top for back, forward, reload and exit.
+- **Library** - add whole folders or individual video files, and see the network address for other devices. Every
+  added folder or file is listed with how many videos it contributes and a **Remove** button: press it once and it
+  arms (the label changes to *Remove?*), press again and the entry leaves MattStream. Nothing is deleted from disk,
+  and the shelf updates straight away. A single added file is listed on its own, and still picks up a `poster.jpg` or
+  `.srt` from its own folder.
+- **Remove a video** - in a film's info panel, or on any episode row, remove it from the shelf. **The file is never
+  deleted** - it simply moves to *Removed from your shelf*, where you can restore it at any time.
+- **Rescan** - pick up new files. Removing an entry drops it from the shelf but never touches your files.
+- **Search** - filters films, shows and episode titles as you type.
+- **Movies** - sort by recently added, title or release year.
+- **Series** - season tabs, episode list with a Play button and progress per episode.
 
-### Downloading videos (Windows)
+Adding a folder or a file is also possible with a typed path if the browser cannot reach a network drive - paste
+either `D:\Movies` or `D:\Movies\The Matrix 1999.mkv` into the path box.
 
-1. Open a site, choose a movie or episode, and start playing it. Use the site's normal player and sign in there if the site asks.
-2. When a downloadable stream is found, the **Downloads** button in the site toolbar shows a badge. Open it to see the detected HLS and direct video streams.
-3. For HLS, choose a **quality** from the format selector beside the Download button. The selector lists the resolutions and bitrates advertised by the stream. Choose **Download**; HLS is combined and remuxed to MP4, while MP4/WebM/FLV files are saved as-is. Files go to your Windows **Downloads** folder. **Show in folder** opens the finished file.
-4. Keep the site open and the video playing until detection finishes. A stream that expires, needs a different sign-in, or is DRM-protected will fail with a message in the drawer.
+---
 
-Only download media you have permission to keep. The downloader uses your current site session, but it does not bypass DRM, encrypted HLS, paywalls, or live-stream restrictions.
+## Keyboard shortcuts (player)
 
-## Android phone / tablet
+| Key | Action |
+| --- | --- |
+| `Space` / `K` | Play or pause |
+| `←` / `→` | Back or forward 10 seconds |
+| `↑` / `↓` | Volume |
+| `F` | Fullscreen |
+| `M` | Mute |
+| `Esc` | Close the player |
 
-1. Copy `anystreamsitev1.1.3-phone.apk` to the device, or download it directly in the browser.
-2. Open the file and allow installs from unknown sources when Android asks.
-3. The APK is self-signed, so Play Protect may warn about an unknown developer. That is expected for a sideloaded build. If Android blocks the install, tap **More details**, then **Install anyway**; the manifest targets Android 14, so the "made for an older version" warning no longer applies.
-4. Open the app, paste a site URL and add it. Two tiles sit per row on a normal handset.
-5. Tap a tile to open the site full screen. Links stay in that view, and the back button walks your history before returning to the library.
+On a TV or phone, the same controls work from the remote: **←/→** seek 10 seconds, **↑/↓** change the volume,
+**OK/Enter** plays or pauses, and **Back** closes the player and then the info panel.
 
-## Android TV
-
-1. Install `anystreamsitev1.1.3-android-tv.apk`. The easiest routes are the **Downloader** app on the TV, or ADB from a computer:
-
-   ```bash
-   adb install anystreamsitev1.1.3-android-tv.apk
-   ```
-
-2. anystreamsite appears in the TV launcher after installing.
-3. Move around with the D-pad: left, right, up and down jump between tiles, and **OK** opens the highlighted site. Up from the tiles reaches the top bar, where you can select Settings or Add site. Down from the top bar lands on the **Paste a site URL** field; **Right** moves to **Add to library**, and **OK** on the URL field opens the keyboard. In **Settings → TV navigation**, choose **D-pad focus** or **Mouse cursor** for opened sites.
-4. **Hold OK** on a tile to open its **Edit site / Remove site** menu. The menu also has a Remove confirmation.
-5. Inside an opened site, **D-pad focus** moves through links and buttons, **OK** activates the highlighted control, and the page scrolls when focus has nowhere left to go. Press **Up at the very top of the page** or **Menu** to move into the native Back / Forward / Reload / Exit bar; use Left/Right and OK, then **Down** to return to the page. In **Mouse cursor** mode, the arrows move the dot and **OK** activates the hyperlink or control beneath it. A selected site text field opens the TV keyboard; the D-pad and OK then belong to the keyboard, and **Back** closes it.
-6. **Back** closes the keyboard, an open site dialog or fullscreen video first. It then walks the site history; when there is no more history it returns to the library. At the library home screen, Back sends the app to the TV home screen instead of killing the task.
-7. If you already have an earlier v1.1 TV build, install this APK over it. Its versionCode is 26, so Android accepts it as an update without uninstalling first.
-
-The TV build uses a compact 10-foot layout that scales from 720p through 4K, with larger tiles, focus outlines and no heavy blur effects, so it stays readable and smooth on low-power boxes. Links inside a site stay in the same view, and **Back** walks the site's history before returning to the library.
-
-## Adding and managing sites
-
-- Use the box at the top of the window, or the **Add site** button, to add a URL.
-- Leave the name blank and the app derives one from the address; type a name to override it.
-- Icons are fetched from the site's own favicon at 256 px. If a site's icon is wrong or missing, paste a custom icon URL in the **Custom icon URL** field.
-- Hover a tile and use the pencil to edit it or the bin to remove it.
-- Sites with no reachable icon fall back to a letter tile in the site's accent colour.
-
-## Settings
-
-Open Settings from the gear in the top bar.
-
-- **Appearance** — dark or light
-- **Accent colour** — default red, midnight, emerald, violet or sunset
-- **Tile size** — Small, Medium or Large
-- **Layout** — Grid, Bold or Minimal
-- **Animations** — splash, launch and hover motion
-- **TV navigation** — on Android TV, switch between D-pad focus and a D-pad-controlled mouse cursor inside opened sites
-- **Storage** — clear cached pages, or clear cookies and sign out of every site
-
-Clearing cache keeps you signed in. Clearing cookies removes every sign-in, so you will need to log in again on each service.
+---
 
 ## Where your data lives
 
-Your library is stored locally in the app's profile on the device; it is not uploaded anywhere. Cookies for the sites you open live in the same profile, which is what keeps you signed in. Removing the app or clearing its data removes both.
-
-## Build from source
-
-### Windows
-
-Requires Node.js 20 or newer.
-
-```bash
-npm install
-npm start      # run from source
-npm run dist   # build the installer into dist/
 ```
 
-The installer name comes from `build.nsis.artifactName` in `package.json` and includes the version, platform and architecture. The Windows build copies the FFmpeg binary from `ffmpeg-static` into `resources/bin` at package time; its GPL license and source link are included alongside it.
-
-### Android
-
-The APK builds without Gradle. `android/build.sh` compiles the Java sources with `aapt2`, `javac`, `d8`, `zipalign` and `apksigner`, then injects the same `index.html` used by the desktop app into the APK assets.
-
-You need:
-
-- JDK 17
-- Android SDK build-tools 34.0.0 and platform `android-34`
-
-```bash
-bash android/build.sh
+  data/
+    config.json     library folders and port
+    library.json    the scanned index (deleted and rebuilt on rescan)
+    probes.json     cached FFmpeg metadata, keyed by path + size + modified time
+    progress.json   watch positions
 ```
 
-APKs are written to `dist/android/` and signed with the keystore referenced by the build script. The phone and TV builds differ in manifest, layout, and the injected TV remote/focus and CSS layer; the TV build also packages a site D-pad controller.
+Everything is local to this folder. Nothing is uploaded, no account is needed, and no metadata is fetched from the
+internet. Delete `data/` to start fresh.
 
-## Known limitations
+## Project layout
 
-- **DRM playback** — Netflix and Hulu open and browse normally, but streaming playback needs Widevine, which the Windows build does not ship with. Playback on those services may not work there.
-- **Video download limits** — only unencrypted, on-demand HLS and direct MP4/WebM/FLV files are supported. Encrypted HLS (including AES-128), DRM-protected streams, and live streams are refused rather than bypassed. Some sites serve video in forms the app cannot see, such as cross-origin embedded players or canvas-rendered video.
-- **Unsigned builds** — the Windows installer has no code-signing certificate, and the APKs use a self-signed key. Both trigger warnings on first install.
-- **Android WebView** — some services refuse to play DRM content inside a WebView. The app itself works, but playback support varies by service.
-- **Local library** — there is no account or sync between devices; each device keeps its own library.
+```
 
-## Version
+  electron/main.js       the desktop app: window, icons, lifecycle
+  android/               Android phone + Android TV apps (Gradle, WebView client)
+  scripts/package-windows.mjs  builds the portable Windows zip
+  start.bat / start.sh   launchers
+  create-shortcut.ps1    recreates the desktop + Start menu shortcuts and icon.ico
+  icon.ico               app icon, generated by that script
+  bin/ffmpeg.exe         the transcoding engine (GPL, license alongside)
+  server/
+    index.js             HTTP server, streaming, transcoding, API
+    scan.js              folder walk, file-name parsing, artwork, subtitles
+    media.js             FFmpeg discovery, probing, playback decisions
+    store.js             JSON persistence
+  web/
+    index.html, app.js, styles.css, icon.svg, manifest.webmanifest
+```
 
-Current Android release: **v1.1.3** (versionCode **26**). This remote-control patch removes the old 3-second scroll mode, gives the D-pad direct focus plus page scrolling, and activates links through real taps so site Back history is recorded. The TV keyboard keeps its D-pad input, Back closes dialogs and fullscreen before history, and Up-at-top or Menu reaches the native site toolbar. Focus returns to the control that opened a dialog, the one-second long-press menu applies only to library tiles, and holding OK on an ordinary button still performs a normal click.
+The server itself has no npm dependencies - only Electron, the desktop shell, is installed.
 
-The Windows build remains **v1.1.2**.
+## If something does not play
+
+- **Only MP4/WebM play, everything else errors** - FFmpeg is missing. Check that `bin/ffmpeg.exe` exists (or that
+  `ffmpeg` is on PATH) and restart the server; the start-up banner says whether FFmpeg was found.
+- **A file is missing from the shelf** - names shorter than 4 KB and anything containing the word `sample` are
+  skipped on purpose. Hidden folders, `.git`, `node_modules` and system folders are not scanned.
+- **A film shows the wrong title** - rename it `Title (Year).mkv`; the year in brackets settles the parse.
+- **Playback stutters on a transcode** - the machine is CPU-bound. Try the file's native format or a lower-resolution
+  copy; direct-play files are always smooth.
+- **Another device cannot connect** - check both are on the same network and that Windows Firewall allowed Node.js
+  on private networks the first time it asked.
+
+## Licence
+
+MattStream's own code is MIT. The bundled FFmpeg build is GPLv3 - see `bin/FFMPEG-LICENSE.txt`.

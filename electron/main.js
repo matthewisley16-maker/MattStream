@@ -1,334 +1,141 @@
-// anystreamsite — Electron shell.
-// The library UI runs in the main window; streaming sites open in a native
-// web view docked below the app's own header, so they feel part of the app.
+'use strict';
 
-const path = require("node:path");
-const { app, BrowserWindow, WebContentsView, ipcMain, shell, Menu, session } = require("electron");
-const { DownloadManager } = require("./downloads");
+// MattStream desktop app: the media server runs inside this process and the
+// window loads it directly - no browser, no address bar, no console window.
+const path = require('path');
+const http = require('http');
+const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
 
-const APP_ROOT = path.join(__dirname, "..");
-// Must match the .nav heights in index.html.
-const HEADER_HEIGHT = 68;
-const COLLAPSED_HEIGHT = 30;
-// Persistent partition: cookies and logins survive a restart.
-const SITE_PARTITION = "persist:anystreamsite";
+const APP_ROOT = path.resolve(__dirname, '..');
+const DEFAULT_PORT = 8096;
 
-// The opening splash plays a short sound before the window has been clicked.
-app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+app.setName('MattStream');
+app.setAppUserModelId('com.mattstream.app');
 
 let mainWindow = null;
-let siteView = null;
-let downloads = null;
-let headerInset = HEADER_HEIGHT;
-let panelInset = 0;
-let siteRetried = false;
+let serverPort = DEFAULT_PORT;
 
-function layoutSiteView() {
-  if (!siteView || !mainWindow) return;
-  const [width, height] = mainWindow.getContentSize();
-  var inset = headerInset + panelInset;
-  siteView.setBounds({
-    x: 0,
-    y: inset,
-    width,
-    height: Math.max(0, height - inset)
+// If the server is already up (started from a terminal, or a stale instance),
+// reuse it instead of fighting over the port.
+function probeServer(port) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const request = http.get(
+      { host: '127.0.0.1', port, path: '/api/status', timeout: 1200 },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => {
+          if (body.length < 4000) body += chunk;
+        });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            finish(Boolean(parsed && parsed.version) ? port : null);
+          } catch (err) {
+            finish(null);
+          }
+        });
+      }
+    );
+    request.on('timeout', () => {
+      request.destroy();
+      finish(null);
+    });
+    request.on('error', () => finish(null));
   });
-}
-
-function closeSiteView() {
-  panelInset = 0;
-  if (downloads) {
-    downloads.releaseSiteView();
-    downloads.resetMedia();
-  }
-  if (!siteView) return;
-  try {
-    if (mainWindow) mainWindow.contentView.removeChildView(siteView);
-  } catch (err) { /* view already detached */ }
-  try {
-    siteView.webContents.close();
-  } catch (err) {
-    try { siteView.webContents.destroy(); } catch (err2) { /* already gone */ }
-  }
-  siteView = null;
-}
-
-function navigation(wc) {
-  try { return wc.navigationHistory || null; } catch (err) { return null; }
-}
-
-function canGo(wc, direction) {
-  const history = navigation(wc);
-  if (!history) return false;
-  try {
-    return direction === "back" ? history.canGoBack() : history.canGoForward();
-  } catch (err) {
-    return false;
-  }
-}
-
-function goHistory(wc, direction) {
-  const history = navigation(wc);
-  if (!history) return;
-  try {
-    if (direction === "back" && history.canGoBack()) history.goBack();
-    if (direction === "forward" && history.canGoForward()) history.goForward();
-  } catch (err) { /* nothing to navigate */ }
-}
-
-function sendSiteState() {
-  if (!siteView || !mainWindow) return;
-  const wc = siteView.webContents;
-  mainWindow.webContents.send("site:state", {
-    canGoBack: canGo(wc, "back"),
-    canGoForward: canGo(wc, "forward"),
-    url: wc.getURL()
-  });
-}
-
-function loadSiteUrl(url) {
-  siteRetried = false;
-  return siteView.webContents.loadURL(url).catch(function () { /* surfaced by the page itself */ });
-}
-
-function openSite(url) {
-  // Reuse the live view. Replacing it would throw away its navigation history,
-  // so clicking another site or a link would always start a new window/stack.
-  // Keeping one view means Back returns through the pages the user just visited.
-  panelInset = 0;
-  if (downloads) downloads.resetMedia();
-  if (siteView) {
-    headerInset = HEADER_HEIGHT;
-    layoutSiteView();
-    loadSiteUrl(url);
-    sendSiteState();
-    return;
-  }
-
-  siteView = new WebContentsView({
-    webPreferences: {
-      // Persisted partition keeps logins between launches.
-      partition: SITE_PARTITION,
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
-  });
-
-  mainWindow.contentView.addChildView(siteView);
-  headerInset = HEADER_HEIGHT;
-  layoutSiteView();
-  if (downloads) downloads.watchSiteView(siteView);
-
-  // A transient failure (network hiccup, DNS) gets one silent retry instead of
-  // showing the user an error screen.
-  siteView.webContents.on("did-fail-load", function (_event, errorCode, _desc, failedUrl, isMainFrame) {
-    if (!isMainFrame || errorCode === -3 || siteRetried) return;
-    siteRetried = true;
-    setTimeout(function () {
-      if (siteView && failedUrl) siteView.webContents.loadURL(failedUrl).catch(function () {});
-    }, 900);
-  });
-
-  siteView.webContents.setWindowOpenHandler(function (details) {
-    // A pop-up is part of the site the user is already browsing. Load it in
-    // this view so Back takes them to the page they came from, and never hand
-    // it to the system browser as a separate window.
-    if (/^https?:\/\//i.test(details.url)) loadSiteUrl(details.url);
-    return { action: "deny" };
-  });
-
-  siteView.webContents.on("before-input-event", function (event, input) {
-    if (input.type === "keyDown" && input.key === "Escape") {
-      event.preventDefault();
-      closeSiteView();
-      if (mainWindow) mainWindow.webContents.send("site:closed");
-    }
-  });
-
-  ["did-navigate", "did-navigate-in-page", "did-start-loading", "did-stop-loading"].forEach(function (name) {
-    siteView.webContents.on(name, sendSiteState);
-  });
-
-  loadSiteUrl(url);
-  sendSiteState();
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1300,
-    height: 880,
-    minWidth: 880,
+    width: 1440,
+    height: 900,
+    minWidth: 900,
     minHeight: 560,
-    backgroundColor: "#000000",
-    show: false,
+    backgroundColor: '#07070b',
+    title: 'MattStream',
+    icon: path.join(APP_ROOT, 'icon.ico'),
     autoHideMenuBar: true,
-    titleBarStyle: "hidden",
-    titleBarOverlay: {
-      color: "#0a0a0a",
-      symbolColor: "#e9e9e9",
-      height: 40
-    },
-    icon: path.join(APP_ROOT, "anystream.ico"),
+    show: false,
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
-    }
+      sandbox: true,
+      spellcheck: false,
+      backgroundThrottling: false,
+    },
   });
 
-  mainWindow.loadFile(path.join(APP_ROOT, "index.html"));
-
-  mainWindow.once("ready-to-show", function () { mainWindow.show(); });
-  mainWindow.on("resize", layoutSiteView);
-  mainWindow.on("closed", function () {
-    siteView = null;
+  mainWindow.loadURL('http://127.0.0.1:' + serverPort + '/');
+  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.on('closed', () => {
     mainWindow = null;
   });
 
-  // Links opened from the library itself go to the real browser.
-  mainWindow.webContents.setWindowOpenHandler(function (details) {
-    shell.openExternal(details.url);
-    return { action: "deny" };
+  // Nothing in the app should navigate away; send real links to the browser.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('http://127.0.0.1:' + serverPort)) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
   });
 }
 
-ipcMain.handle("site:open", function (_event, url) {
-  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return false;
-  openSite(url);
-  return true;
-});
-
-ipcMain.handle("site:close", function () {
-  closeSiteView();
-  // Keep the renderer in sync even if a view goes away by another route.
-  if (mainWindow) mainWindow.webContents.send("site:closed");
-  return true;
-});
-
-ipcMain.handle("site:reload", function () {
-  if (siteView) siteView.webContents.reload();
-  return true;
-});
-
-ipcMain.handle("site:back", function () {
-  if (siteView) goHistory(siteView.webContents, "back");
-  return true;
-});
-
-ipcMain.handle("site:forward", function () {
-  if (siteView) goHistory(siteView.webContents, "forward");
-  return true;
-});
-
-ipcMain.handle("site:chrome", function (_event, hidden) {
-  headerInset = hidden ? COLLAPSED_HEIGHT : HEADER_HEIGHT;
-  if (hidden) panelInset = 0;
-  layoutSiteView();
-  return headerInset;
-});
-
-ipcMain.handle("site:downloads-panel", function (_event, open, height) {
-  if (!siteView) return 0;
-  var requested = Number(height);
-  panelInset = open && isFinite(requested) ? Math.max(0, Math.min(360, Math.round(requested))) : 0;
-  layoutSiteView();
-  return panelInset;
-});
-
-function siteSession() {
-  try {
-    return session.fromPartition(SITE_PARTITION);
-  } catch (err) {
-    return null;
-  }
-}
-
-// The library's own storage lives in the default session, so both of these only
-// touch what the streaming sites kept behind.
-ipcMain.handle("data:clear-cache", async function () {
-  const ses = siteSession();
-  if (!ses) return { ok: false };
-  try {
-    await ses.clearCache();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-ipcMain.handle("data:clear-cookies", async function () {
-  const ses = siteSession();
-  if (!ses) return { ok: false };
-  try {
-    // Sign-in state mostly lives in cookies, but many sites also keep tokens in
-    // local storage, IndexedDB or a service worker. Wiping cookies alone would
-    // leave the user signed in, so clear everything the sites stored.
-    await ses.clearStorageData({
-      storages: ["cookies", "localstorage", "indexdb", "websql", "serviceworkers", "cachestorage"]
-    });
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-app.whenReady().then(function () {
+async function boot() {
   Menu.setApplicationMenu(null);
 
-  downloads = new DownloadManager({
-    getSiteView: function () { return siteView; },
-    getSession: siteSession,
-    send: function (state) {
-      if (mainWindow && !mainWindow.webContents.isDestroyed()) {
-        mainWindow.webContents.send("downloads:state", state);
-      }
+  const already = await probeServer(DEFAULT_PORT);
+  if (already) {
+    serverPort = already;
+  } else {
+    try {
+      const backend = require(path.join(APP_ROOT, 'server', 'index.js'));
+      const started = await backend.start();
+      serverPort = started.port;
+    } catch (err) {
+      dialog.showErrorBox('MattStream could not start', String(err && err.message ? err.message : err));
+      app.quit();
+      return;
+    }
+  }
+
+  createWindow();
+}
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
   });
 
-  function downloadState() {
-    return downloads ? downloads.publicState() : { engine: false, media: [], jobs: [] };
-  }
+  app.whenReady().then(boot);
 
-  ipcMain.handle("downloads:get", function () { return downloadState(); });
-  ipcMain.handle("downloads:start", function (_event, id, qualityId) {
-    if (!downloads || typeof id !== "string") return { ok: false, error: "That video is unavailable." };
-    return downloads.start(id, typeof qualityId === "string" ? qualityId : null);
-  });
-  ipcMain.handle("downloads:cancel", function (_event, id) {
-    if (!downloads || typeof id !== "string") return false;
-    return downloads.cancel(id);
-  });
-  ipcMain.handle("downloads:show", function (_event, id) {
-    if (!downloads || typeof id !== "string") return false;
-    return downloads.show(id);
-  });
-  ipcMain.handle("downloads:open-folder", function () {
-    return downloads ? downloads.openFolder() : "";
-  });
-  ipcMain.handle("downloads:clear-media", function () {
-    if (!downloads) return false;
-    downloads.resetMedia();
-    return true;
-  });
-  ipcMain.handle("downloads:clear-finished", function () {
-    if (!downloads) return false;
-    downloads.clearFinished();
-    return true;
-  });
-
-  createWindow();
-
-  app.on("activate", function () {
+  app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
 
-app.on("before-quit", function () {
-  if (downloads) downloads.stopAll();
-});
+  app.on('window-all-closed', () => {
+    app.quit();
+  });
 
-app.on("window-all-closed", function () {
-  if (process.platform !== "darwin") app.quit();
-});
+  app.on('before-quit', () => {
+    try {
+      require(path.join(APP_ROOT, 'server', 'index.js')).stop();
+    } catch (err) {
+      /* shutting down anyway */
+    }
+  });
+}
