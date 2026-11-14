@@ -61,9 +61,28 @@ function adminKey() {
   return key;
 }
 
+// Only a real request from this machine counts as the owner sitting in front of
+// it. A tunnel or reverse proxy also reaches us from 127.0.0.1, so a request that
+// carries forwarding headers - or that arrives for a host name that is not this
+// machine - is remote and has to present the admin key like any other device.
 function isLoopback(req) {
   const address = (req.socket && req.socket.remoteAddress) || '';
-  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+  const fromThisMachine = address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+  if (!fromThisMachine) return false;
+
+  const headers = req.headers || {};
+  if (
+    headers['cf-connecting-ip'] ||
+    headers['cf-ray'] ||
+    headers['x-forwarded-for'] ||
+    headers['x-real-ip'] ||
+    headers['forwarded']
+  ) {
+    return false;
+  }
+
+  const host = String(headers.host || '').toLowerCase().replace(/:\d+$/, '');
+  return host === '' || host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
 }
 
 function isAdmin(req) {
