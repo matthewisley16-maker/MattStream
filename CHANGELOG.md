@@ -10,6 +10,9 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Added
 
+- **The public link keeps itself alive** - the watchdog also restarts the tunnel if it stops, writes the current
+  address to `.tools/public-url.txt` and updates a `MattStream on my phone.url` shortcut on the Desktop.
+
 - **MattStream stays running** - closing the window now hides it to the tray instead of stopping the
   server, so the library keeps serving phones and TVs. The tray has *Open MattStream*, *Copy network
   address*, *Start with Windows* and *Restart it if it ever stops*; *Quit* stops it on purpose. The
