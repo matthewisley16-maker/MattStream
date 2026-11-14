@@ -849,6 +849,9 @@ function render() {
 // Android TV's Back button is the browser back button, so overlays push a
 // history entry and close themselves when it is pressed.
 let closingFromPop = false;
+// When the current overlay was opened. A history pop that was already queued
+// before that moment must not close it (it belongs to the previous overlay).
+let overlayOpenedAt = 0;
 // Set while we undo our own history entry, so the pop it causes does not close
 // an overlay that has just been reopened (for example after a removal).
 let suppressPop = false;
@@ -887,6 +890,7 @@ function closeDialog() {
 
 function openDialog(dialog) {
   const layer = $('#dialogLayer');
+  overlayOpenedAt = Date.now();
   pushBackGuard();
   layer.innerHTML = '';
   layer.appendChild(dialog);
@@ -2270,6 +2274,11 @@ async function boot() {
   window.addEventListener('popstate', () => {
     if (suppressPop) {
       suppressPop = false;
+      return;
+    }
+    // A pop queued before this panel opened would otherwise shut it instantly.
+    if (Date.now() - overlayOpenedAt < 500) {
+      pushBackGuard();
       return;
     }
     closingFromPop = true;
