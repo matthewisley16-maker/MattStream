@@ -1109,3 +1109,10 @@ body.is-tv .card-play { opacity: 1; transform: none; }
 @media (max-height: 760px) {
   .dialog-hero { height: clamp(110px, 16vw, 150px); }
 }
+
+/* ---------- watchlist ---------- */
+
+.watch-btn.is-watched {
+  color: var(--accent);
+  border-color: var(--accent);
+}

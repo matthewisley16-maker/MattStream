@@ -366,6 +366,60 @@ function playShow(show) {
   openPlayer(next, watched ? watched.position : null);
 }
 
+/* ---------------- watchlist ---------------- */
+
+// Kept in this browser, so a shared library gives every viewer their own list.
+const WATCHLIST_KEY = 'mattstream-watchlist';
+
+function readWatchlist() {
+  try {
+    const list = JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]');
+    return Array.isArray(list) ? list.filter((entry) => entry && entry.key) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeWatchlist(list) {
+  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(list));
+}
+
+function isWatchlisted(key) {
+  return readWatchlist().some((entry) => entry.key === key);
+}
+
+// Adds or removes one entry; returns true when it is on the list afterwards.
+function toggleWatchlist(entry) {
+  const list = readWatchlist();
+  const at = list.findIndex((row) => row.key === entry.key);
+  if (at >= 0) {
+    list.splice(at, 1);
+    writeWatchlist(list);
+    return false;
+  }
+  list.unshift(Object.assign({ added: Date.now() }, entry));
+  writeWatchlist(list);
+  return true;
+}
+
+function watchlistButton(key, buildEntry, label) {
+  const button = el('button', 'btn is-ghost watch-btn');
+  button.type = 'button';
+  const paint = () => {
+    const on = isWatchlisted(key);
+    button.textContent = on ? '★ On your watchlist' : '☆ Add to watchlist';
+    button.classList.toggle('is-watched', on);
+    button.setAttribute('aria-pressed', on ? 'true' : 'false');
+  };
+  paint();
+  button.addEventListener('click', () => {
+    const on = toggleWatchlist(buildEntry());
+    paint();
+    toast(on ? 'Added "' + label + '" to your watchlist' : 'Removed "' + label + '" from your watchlist');
+  });
+  return button;
+}
+
 function railSection(title, subtitle, cards) {
   const section = el('section', 'rail');
   const head = el('div', 'rail-head');
@@ -518,6 +572,40 @@ function viewHome() {
       });
     });
     wrap.appendChild(railSection('Continue watching', watching.length + ' in progress', cards));
+  }
+
+  const watchCards = [];
+  for (const entry of readWatchlist()) {
+    if (entry.kind === 'show') {
+      const show = state.derived.shows.find((candidate) => candidate.key === entry.showKey);
+      if (!show) continue;
+      watchCards.push(
+        makeCard({
+          title: show.name,
+          sub: show.episodes.length + ' episode' + (show.episodes.length === 1 ? '' : 's'),
+          artItem: show.artItem,
+          onClick: () => openShowDialog(show),
+          onPlay: () => playShow(show),
+        })
+      );
+      continue;
+    }
+    const saved = state.items.find((candidate) => candidate.id === entry.id);
+    if (!saved) continue;
+    const savedProgress = progressFor(saved);
+    watchCards.push(
+      makeCard({
+        title: saved.title,
+        sub: formatDuration(saved.duration),
+        artItem: saved,
+        percent: savedProgress ? savedProgress.percent : 0,
+        onClick: () => openMovieDialog(saved),
+        onPlay: () => openPlayer(saved, savedProgress ? savedProgress.position : null),
+      })
+    );
+  }
+  if (watchCards.length) {
+    wrap.appendChild(railSection('Your watchlist', watchCards.length + ' saved', watchCards));
   }
 
   const recent = state.items.slice().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)).slice(0, 18);
@@ -921,7 +1009,14 @@ function openMovieDialog(item) {
     for (const genre of item.genres.slice(0, 4)) genreRow.appendChild(pill(genre));
     titles.appendChild(genreRow);
   }
-  if (item.overview) titles.appendChild(el('p', 'overview', item.overview));
+  titles.appendChild(
+    el(
+      'p',
+      'overview',
+      item.overview ||
+        'No description yet - add one with Manage -> Edit, or put a .nfo file next to the video and rescan.'
+    )
+  );
 
   const actions = el('div', 'dialog-actions');
   const playBtn = el('button', 'btn is-primary');
@@ -938,6 +1033,9 @@ function openMovieDialog(item) {
     restart.addEventListener('click', () => openPlayer(item, 0));
     actions.appendChild(restart);
   }
+  actions.appendChild(
+    watchlistButton('movie:' + item.id, () => ({ key: 'movie:' + item.id, kind: 'movie', id: item.id, title: item.title }), item.title)
+  );
   actions.appendChild(
     twoStepButton('Remove from MattStream', 'Remove? The file stays on disk', () => removeFromLibrary(item))
   );
@@ -1078,7 +1176,14 @@ function openShowDialog(show) {
   meta.appendChild(pill(show.episodes.length + ' episode' + (show.episodes.length === 1 ? '' : 's')));
   if (show.artItem && show.artItem.width) meta.appendChild(pill(resolutionLabel(show.artItem.width, show.artItem.height)));
   titles.appendChild(meta);
-  if (show.artItem && show.artItem.overview) titles.appendChild(el('p', 'overview', show.artItem.overview));
+  titles.appendChild(
+    el(
+      'p',
+      'overview',
+      (show.artItem && show.artItem.overview) ||
+        'No description yet - add one from Manage -> Edit on an episode, or put a .nfo file beside the show.'
+    )
+  );
 
   const resumable = show.episodes.find((ep) => progressFor(ep));
   const next = resumable || show.episodes[0];
@@ -1094,6 +1199,13 @@ function openShowDialog(show) {
     if (next) openPlayer(next, resumable ? progressFor(next).position : null);
   });
   actions.appendChild(playBtn);
+  actions.appendChild(
+    watchlistButton(
+      'show:' + show.key,
+      () => ({ key: 'show:' + show.key, kind: 'show', showKey: show.key, title: show.name }),
+      show.name
+    )
+  );
   titles.appendChild(actions);
   head.appendChild(titles);
   body.appendChild(head);
