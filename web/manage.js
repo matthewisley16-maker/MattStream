@@ -87,6 +87,32 @@ function registerCurrentServer(name) {
   return server;
 }
 
+function isLoopbackUrl(url) {
+  try {
+    const host = new URL(url, location.href).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+  } catch (err) {
+    return false;
+  }
+}
+
+// The address to suggest instead: this server's own LAN address when known.
+function exampleLanUrl() {
+  const lan = (state.status && state.status.lanUrls) || [];
+  return lan[0] || 'http://192.168.1.24:8096';
+}
+
+function loopbackWarning(raw) {
+  if (!raw) return '';
+  if (!isLoopbackUrl(raw)) return '';
+  // Typing it on the machine that hosts the server is fine.
+  if (isLoopbackUrl(location.href)) return '';
+  return (
+    'That address only works on the computer running MattStream - on this device 127.0.0.1 is this device. ' +
+    'Use ' + exampleLanUrl()
+  );
+}
+
 function goToServer(server) {
   setActiveServer(server.id);
   const target = normalizeUrl(server.url) + '/';
@@ -143,6 +169,32 @@ function openServersDialog(focusKey) {
     currentCard.appendChild(keyRow);
   }
   body.appendChild(currentCard);
+
+  const lanUrls = ((state.status && state.status.lanUrls) || []).filter(Boolean);
+  if (lanUrls.length) {
+    const shareCard = el('div', 'server-current');
+    shareCard.appendChild(el('strong', null, 'Type one of these into your phone, TV or another PC'));
+    for (const lanUrl of lanUrls) {
+      const line = el('div', 'server-line');
+      line.appendChild(el('code', 'mono', lanUrl));
+      const copy = el('button', 'icon-btn', 'Copy');
+      copy.type = 'button';
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(lanUrl);
+          toast('Copied ' + lanUrl);
+        } catch (err) {
+          toast('Copy failed - type it in by hand', true);
+        }
+      });
+      line.appendChild(copy);
+      shareCard.appendChild(line);
+    }
+    shareCard.appendChild(
+      el('span', 'hint', 'Never 127.0.0.1 or localhost there - on another device those mean that device itself.')
+    );
+    body.appendChild(shareCard);
+  }
 
   const listWrap = el('div', 'lib-list');
   const servers = readServers();
@@ -266,6 +318,12 @@ function openServerForm(existing, mount, focusKey) {
   const test = el('button', 'btn is-ghost', 'Test connection');
   test.type = 'button';
   test.addEventListener('click', async () => {
+    const wrong = loopbackWarning(urlInput.value);
+    if (wrong) {
+      testResult.textContent = wrong;
+      testResult.classList.add('is-error');
+      return;
+    }
     test.disabled = true;
     testResult.textContent = 'Testing ' + normalizeUrl(urlInput.value) + ' ...';
     const result = await testServer(urlInput.value);
@@ -283,6 +341,13 @@ function openServerForm(existing, mount, focusKey) {
   const save = el('button', 'btn is-primary', existing ? 'Save changes' : 'Save and connect');
   save.type = 'button';
   save.addEventListener('click', async () => {
+    const wrong = loopbackWarning(urlInput.value);
+    if (wrong) {
+      toast(wrong, true);
+      testResult.textContent = wrong;
+      testResult.classList.add('is-error');
+      return;
+    }
     const url = normalizeUrl(urlInput.value);
     if (!url) {
       toast('Enter the server address', true);
@@ -826,6 +891,12 @@ function showFirstRun(defaults) {
   connectCard.appendChild(actions);
 
   testButton.addEventListener('click', async () => {
+    const wrong = loopbackWarning(urlInput.value);
+    if (wrong) {
+      feedback.className = 'hint is-error';
+      feedback.textContent = wrong;
+      return;
+    }
     const url = normalizeUrl(urlInput.value.trim());
     if (!url) {
       feedback.textContent = 'Enter the address MattStream shows on the computer with your media.';
@@ -847,6 +918,12 @@ function showFirstRun(defaults) {
   });
 
   saveButton.addEventListener('click', async () => {
+    const wrong = loopbackWarning(urlInput.value);
+    if (wrong) {
+      feedback.className = 'hint is-error';
+      feedback.textContent = wrong;
+      return;
+    }
     const url = normalizeUrl(urlInput.value.trim());
     if (!url) {
       feedback.textContent = 'Enter the server address first.';

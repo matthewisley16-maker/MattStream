@@ -53,6 +53,10 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Fixed
 
+- **A phone or TV can no longer be pointed at 127.0.0.1** - on another device that address means that
+  device, so the app now refuses it there and names the computer's LAN address instead. The Servers
+  panel lists those addresses with a Copy button.
+
 - **A panel could close the instant it opened** - a history pop queued by the previous overlay was
   handed to the new one, which shut it before it could be read. Pops older than the panel are now
   ignored.
