@@ -145,6 +145,48 @@ function lanUrls(port) {
 
 let rescanQueued = false;
 
+// A file with no poster or artwork anywhere still deserves a real image, so
+// grab an actual frame from the video itself. Generated once per item, then
+// cached in data/art and reused until the file changes.
+function extractFrame(item, kind) {
+  return new Promise((resolve) => {
+    const out = path.join(ART_DIR, 'auto-' + item.id + '-' + kind + '.jpg');
+    if (fs.existsSync(out)) return resolve(out);
+    if (!state.ffmpegOk) return resolve(null);
+    try {
+      fs.mkdirSync(ART_DIR, { recursive: true });
+    } catch (err) {
+      return resolve(null);
+    }
+
+    const at = Math.max(5, Math.min(120, Math.round((item.duration || 300) * 0.25)));
+    const scale = kind === 'poster' ? 'scale=-2:750,crop=500:750' : 'scale=1280:-2';
+    const child = spawn(
+      FFMPEG,
+      ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(at), '-i', item.path, '-frames:v', '1', '-vf', scale, '-q:v', '3', out],
+      { windowsHide: true }
+    );
+    child.on('error', () => resolve(null));
+    child.on('exit', () => resolve(fs.existsSync(out) ? out : null));
+  });
+}
+
+// Fills in artwork from the video for anything the file system had none for.
+async function addAutoArtwork(items) {
+  if (!state.ffmpegOk) return;
+  for (const item of items) {
+    if (!item.posterPath) {
+      const poster = await extractFrame(item, 'poster');
+      if (poster) item.posterPath = poster;
+    }
+    if (!item.backdropPath) {
+      const backdrop = await extractFrame(item, 'backdrop');
+      if (backdrop) item.backdropPath = backdrop;
+    }
+    if (item.kind === 'episode' && !item.thumbPath && item.posterPath) item.thumbPath = item.posterPath;
+  }
+}
+
 async function runScan() {
   if (state.scanning) {
     // A scan is already walking the libraries; run once more when it finishes
@@ -181,6 +223,7 @@ async function runScan() {
     }
     const overrides = metadataStore.read();
     for (const item of all) applyOverride(item, overrides[item.path.toLowerCase()]);
+    await addAutoArtwork(all);
     libraryStore.write({ items: all, scannedAt: Date.now() });
     libraryStore.flush();
     probeStore.flush();
@@ -818,6 +861,9 @@ async function handleApi(req, res, url) {
     for (const key of ['posterPath', 'backdropPath', 'thumbPath']) {
       const file = override[key];
       if (file && path.resolve(file).startsWith(ART_DIR)) await fsp.unlink(file).catch(() => {});
+    }
+    for (const suffix of ['-poster.jpg', '-backdrop.jpg']) {
+      await fsp.unlink(path.join(ART_DIR, 'auto-' + item.id + suffix)).catch(() => {});
     }
 
     probeStore.update((data) => {
