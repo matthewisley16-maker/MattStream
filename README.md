@@ -268,6 +268,21 @@ mattstream/
 
 The server itself has no npm dependencies - only Electron, the desktop shell, is installed.
 
+## Sharing it with anyone
+
+`share.bat` starts the server if it is not already running, then opens a public `https://…` address you can send
+to anyone. No admin rights, no firewall rule and no router change - the tunnel connects outwards, and Cloudflare
+forwards requests back to this PC.
+
+- Keep that window open while people are watching; closing it stops sharing. The address changes each time you
+  start it, so send the new one.
+- Anyone with the link can browse and play your library. Treat the link as private to the people you send it to.
+- Guests are viewers only. The admin key lives on the machine running the server, and adding, editing or
+  permanently deleting from a shared link needs it.
+- The desktop window is not required for sharing: `share.bat` runs the same server headlessly.
+
+---
+
 ## If something does not play
 
 - **Only MP4/WebM play, everything else errors** - FFmpeg is missing. Check that `bin/ffmpeg.exe` exists (or that
