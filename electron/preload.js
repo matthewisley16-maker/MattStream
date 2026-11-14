@@ -11,4 +11,9 @@ contextBridge.exposeInMainWorld('mattstreamDesktop', {
   // Returns [] when the dialog is cancelled, otherwise absolute paths.
   pickFolder: () => ipcRenderer.invoke('mattstream:pick-folder'),
   pickVideoFiles: () => ipcRenderer.invoke('mattstream:pick-video-files'),
+  // Called when the window is closed to the tray.
+  onHidden: (callback) => {
+    if (typeof callback !== 'function') return;
+    ipcRenderer.on('mattstream:hidden', () => callback());
+  },
 });

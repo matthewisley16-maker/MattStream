@@ -501,18 +501,20 @@ function subtitleVtt(filePath) {
 
 // ---------- playback ----------
 
-function handlePlay(req, res, item, offset, forceTranscode) {
+function handlePlay(req, res, item, offset, forceTranscode, maxHeight) {
   const info = {
     videoCodec: item.videoCodec,
     audioCodec: item.audioCodec,
     width: item.width || 0,
+    height: item.height || 0,
     subtitleStreams: item.subtitleStreams || 0,
   };
-  const args = buildPlayArgs(item.path, offset, info, forceTranscode);
+  const args = buildPlayArgs(item.path, offset, info, forceTranscode, maxHeight);
   res.writeHead(200, {
     'Content-Type': 'video/mp4',
     'Cache-Control': 'no-store',
     'X-Accel-Buffering': 'no',
+    'X-MattStream-Height': maxHeight ? String(maxHeight) : 'source',
   });
 
   let child;
@@ -842,11 +844,13 @@ async function handleApi(req, res, url) {
     if (!item) return sendText(res, 404, 'Unknown video');
     const offset = Number(url.searchParams.get('t') || 0);
     const force = url.searchParams.get('force') === '1';
-    if (item.playback === 'direct' && !force) {
+    const maxHeight = Math.max(0, Math.min(2160, Math.floor(Number(url.searchParams.get('h') || 0))));
+    // A chosen quality goes through ffmpeg so the picture really is smaller.
+    if (item.playback === 'direct' && !force && !maxHeight) {
       res.writeHead(302, { Location: '/api/stream/' + encodeURIComponent(id) });
       return res.end();
     }
-    return handlePlay(req, res, item, offset, force);
+    return handlePlay(req, res, item, offset, force, maxHeight);
   }
 
   if (route.startsWith('/api/art/')) {

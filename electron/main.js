@@ -327,6 +327,16 @@ function createWindow() {
 
   // Closing the window only hides it: the library keeps serving to phones and
   // TVs until you pick Quit from the tray.
+  // The page stops whatever is playing when the window goes away, so audio
+  // never carries on from a tray-only window.
+  mainWindow.on('hide', () => {
+    try {
+      mainWindow.webContents.send('mattstream:hidden');
+    } catch (err) {
+      /* window already gone */
+    }
+  });
+
   mainWindow.on('close', (event) => {
     if (isQuitting) return;
     event.preventDefault();

@@ -1721,6 +1721,8 @@ const player = {
   mode: 'direct',
   offset: 0,
   duration: 0,
+  speed: 1,
+  maxHeight: 0,
   video: null,
   root: null,
   timer: null,
@@ -1733,6 +1735,20 @@ const player = {
 function bufferEnd(video) {
   if (!video || !video.buffered || !video.buffered.length) return 0;
   return video.buffered.end(video.buffered.length - 1);
+}
+
+// Closing the window (or hiding it to the tray) must not leave the film
+// playing sound in the background.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && player.video && !player.video.paused) player.video.pause();
+});
+
+// The desktop window closing to the tray is reported by the shell itself, not
+// only by the page's visibility state.
+if (window.mattstreamDesktop && typeof window.mattstreamDesktop.onHidden === 'function') {
+  window.mattstreamDesktop.onHidden(() => {
+    if (player.video && !player.video.paused) player.video.pause();
+  });
 }
 
 function absoluteTime() {
@@ -1792,16 +1808,23 @@ function attachSource(position) {
   const url =
     player.mode === 'direct'
       ? '/api/stream/' + encodeURIComponent(player.item.id)
-      : '/api/play/' + encodeURIComponent(player.item.id) + '?t=' + start;
+      : '/api/play/' +
+        encodeURIComponent(player.item.id) +
+        '?t=' +
+        start +
+        (player.maxHeight ? '&h=' + player.maxHeight : '');
 
   playerError(null);
   setSpinner(true);
   video.src = url;
   video.load();
+  // load() resets the rate, so a quality change must not lose the speed.
+  video.playbackRate = player.speed || 1;
 
   const onMetadata = () => {
     video.removeEventListener('loadedmetadata', onMetadata);
     player.restarting = false;
+    video.playbackRate = player.speed || 1;
     if (!player.duration && Number.isFinite(video.duration)) player.duration = video.duration;
     if (player.mode === 'direct' && start > 0) {
       try {
@@ -1994,6 +2017,7 @@ function openPlayer(item, startAt) {
   const video = document.createElement('video');
   video.playsInline = true;
   video.preload = 'auto';
+  video.playbackRate = player.speed || 1;
   video.setAttribute('playsinline', '');
   player.video = video;
   root.appendChild(video);
@@ -2131,6 +2155,52 @@ function openPlayer(item, startAt) {
     });
     row.appendChild(subSelect);
   }
+
+  const SPEEDS = [0.75, 1, 1.25, 1.5, 2, 0.5];
+  const speedButton = el('button', 'ctrl ctrl-text', (player.speed || 1) + '×');
+  speedButton.type = 'button';
+  speedButton.title = 'Playback speed';
+  speedButton.setAttribute('aria-label', 'Playback speed');
+  speedButton.addEventListener('click', () => {
+    const at = SPEEDS.indexOf(player.speed || 1);
+    const next = SPEEDS[(at + 1) % SPEEDS.length];
+    player.speed = next;
+    video.playbackRate = next;
+    speedButton.textContent = next + '×';
+    toast('Speed ' + next + '×');
+  });
+  row.appendChild(speedButton);
+
+  const QUALITIES = [
+    { label: 'Auto', h: 0 },
+    { label: '1080p', h: 1080 },
+    { label: '720p', h: 720 },
+    { label: '480p', h: 480 },
+  ];
+  const currentQuality = QUALITIES.find((q) => q.h === (player.maxHeight || 0)) || QUALITIES[0];
+  const qualityButton = el('button', 'ctrl ctrl-text', currentQuality.label);
+  qualityButton.type = 'button';
+  qualityButton.title = 'Video quality';
+  qualityButton.setAttribute('aria-label', 'Video quality');
+  qualityButton.addEventListener('click', () => {
+    const at = QUALITIES.findIndex((q) => q.h === (player.maxHeight || 0));
+    const next = QUALITIES[(at + 1) % QUALITIES.length];
+    const resumeAt = absoluteTime();
+    player.maxHeight = next.h;
+    toast('Quality ' + next.label);
+    openPlayer(item, resumeAt);
+  });
+  row.appendChild(qualityButton);
+
+  const castButton = el('button', 'ctrl ctrl-text', 'Cast');
+  castButton.type = 'button';
+  castButton.title = 'Play this on the TV';
+  castButton.addEventListener('click', () => {
+    // Hand over to the other screen: stop the sound here first.
+    if (player.video && !player.video.paused) player.video.pause();
+    if (typeof openCastMenu === 'function') openCastMenu(item);
+  });
+  row.appendChild(castButton);
 
   const fullscreenButton = el('button', 'ctrl');
   fullscreenButton.type = 'button';

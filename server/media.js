@@ -185,7 +185,7 @@ function copyAudioStream(info) {
 // Fragmented MP4 flags keep the stream playable while it is still being written.
 const FRAGMENTED = ['-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4'];
 
-function buildPlayArgs(input, offsetSec, info, forceTranscode) {
+function buildPlayArgs(input, offsetSec, info, forceTranscode, maxHeight) {
   const args = ['-hide_banner', '-loglevel', 'error', '-nostdin'];
   const offset = Math.max(0, Math.floor(Number(offsetSec) || 0));
   // Input seeking before -i is fast and keyframe aligned.
@@ -195,10 +195,18 @@ function buildPlayArgs(input, offsetSec, info, forceTranscode) {
   if (info && info.subtitleStreams) args.push('-sn');
   args.push('-map', '0:v:0', '-map', '0:a:0?');
 
-  const videoCopy = !forceTranscode && copyVideoStream(info);
+  const limit = Math.max(0, Math.floor(Number(maxHeight) || 0));
+  const sourceHeight = Number(info && info.height) || 0;
+  // A chosen quality only ever shrinks the picture, never blows it up.
+  // Unknown height still honours the request: min() never upscales.
+  const downscale = limit > 0 && (sourceHeight ? sourceHeight > limit : true);
+
+  const videoCopy = !forceTranscode && !downscale && copyVideoStream(info);
   if (videoCopy) {
     args.push('-c:v', 'copy');
   } else {
+    const rate = limit > 0 && limit <= 480 ? '2M' : limit > 0 && limit <= 720 ? '4M' : '8M';
+    const buffer = rate === '8M' ? '16M' : rate === '4M' ? '8M' : '4M';
     args.push(
       '-c:v', 'libx264',
       '-preset', 'veryfast',
@@ -206,11 +214,15 @@ function buildPlayArgs(input, offsetSec, info, forceTranscode) {
       '-pix_fmt', 'yuv420p',
       '-profile:v', 'high',
       '-level', '4.1',
-      '-maxrate', '8M',
-      '-bufsize', '16M'
+      '-maxrate', rate,
+      '-bufsize', buffer
     );
-    // Only downscale when the source is bigger than 1080p; never upscale.
-    if (info && Number(info.width) > 1920) args.push('-vf', 'scale=1920:-2');
+    if (limit > 0 && (downscale || forceTranscode)) {
+      args.push('-vf', "scale=-2:'min(ih," + limit + ")'");
+    } else if (info && Number(info.width) > 1920) {
+      // Only downscale when the source is bigger than 1080p; never upscale.
+      args.push('-vf', 'scale=1920:-2');
+    }
   }
 
   if (!forceTranscode && copyAudioStream(info)) {

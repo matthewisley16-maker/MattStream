@@ -10,6 +10,10 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Added
 
+- **Player controls** - playback speed (0.5× to 2×), a quality picker (Auto, 1080p, 720p, 480p -
+  the server really re-encodes at that height, never upscaling), and a Cast button in the player itself.
+  Closing the window now pauses whatever is playing instead of leaving the sound running in the tray.
+
 - **Cast to another screen** - a film or show can be sent to any other screen with MattStream open (the
   Android TV app, a phone, another PC). *Cast to a screen* lists the screens that are connected and
   *Play there* opens the same video on it; playback streams from the one server, nothing is copied.
