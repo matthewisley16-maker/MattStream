@@ -156,9 +156,61 @@ feel it.
 - **Search** - filters films, shows and episode titles as you type.
 - **Movies** - sort by recently added, title or release year.
 - **Series** - season tabs, episode list with a Play button and progress per episode.
+- **Upload** - *Library -> Add folders or videos -> Choose files to upload...* copies video files from this
+  device into an added folder. The bar is the real transfer, and the new file is scanned as soon as it lands.
+  Only the owner can upload.
+- **Manage** - the owner's management page for everything in the library; see *Media management* below.
 
 Adding a folder or a file is also possible with a typed path if the browser cannot reach a network drive - paste
 either `D:\Movies` or `D:\Movies\The Matrix 1999.mkv` into the path box.
+
+---
+
+## Servers: using MattStream from another device
+
+The app you are looking at is served by one MattStream server - the computer that holds your files. Any other
+device (phone, TV, laptop) is a client of that same server, so it needs that server's address, never its own
+`localhost`.
+
+Press **Servers** in the header (or **Media management -> Server connection**):
+
+- **Current server** - what this window is connected to, whether it answers, and the **admin key** when you are the
+  owner. Type that key on a phone or TV to allow adding, editing and deleting from there.
+- **Saved servers** - each shows its address, whether it is online, and **Test / Connect / Edit / Remove**. A server
+  is tested when you save it: online means it answered as a MattStream server, offline shows the real error.
+- **Add a server** - a name, its address (`192.168.1.24:8096` or a full `http://` URL) and optionally the admin
+  key. **Test connection** checks it first; **Save and connect** switches this window over to it.
+- The last server you used is remembered and reopened automatically. If it is switched off, a bar across the top
+  says so instead of showing an empty library.
+
+The Android phone and TV apps use the same page: first launch asks for the address, remembers it, and everything
+after that comes from the server.
+
+---
+
+## Media management (owner)
+
+**Manage** in the header is the owner's page. Every item shows its poster, title, real filename, type (movie or
+episode), size, and whether its metadata is complete or how many pieces are missing.
+
+Per item:
+
+| Action | What it does |
+| --- | --- |
+| **Play** | Opens the player, resuming where you left off. |
+| **Edit** | Title, year, show, runtime, genres and description. Stored by the server, kept across rescans. |
+| **Poster** / **Backdrop** | Upload your own image; it replaces the one found on disk. |
+| **Refresh** | Re-probes the file and re-reads its metadata and artwork. |
+| **Remove** | Takes the item off the shelf. The file itself is never touched. |
+| **Delete file** | Permanently deletes the media file from the server. |
+
+**Delete file** is deliberately awkward: the dialog names the item, shows the filename and full path, and will not
+enable the button until you type that filename exactly. Deleting also drops the item from the library, search and
+watch progress, and clears its cached metadata plus any artwork MattStream stored for it. Nothing is ever deleted
+silently.
+
+Adding, editing and deleting are owner-only. On the computer running the server you are the owner automatically; on
+any other device, enter the admin key from the **Servers** page first - the Manage page offers to open it.
 
 ---
 
@@ -187,6 +239,8 @@ mattstream/
     library.json    the scanned index (deleted and rebuilt on rescan)
     probes.json     cached FFmpeg metadata, keyed by path + size + modified time
     progress.json   watch positions
+    metadata.json   hand-edited details and custom artwork paths
+    art/            posters and backdrops you uploaded
 ```
 
 Everything is local to this folder. Nothing is uploaded, no account is needed, and no metadata is fetched from the
@@ -209,7 +263,7 @@ mattstream/
     media.js             FFmpeg discovery, probing, playback decisions
     store.js             JSON persistence
   web/
-    index.html, app.js, styles.css, icon.svg, manifest.webmanifest
+    index.html, app.js, manage.js, styles.css, icon.svg, manifest.webmanifest
 ```
 
 The server itself has no npm dependencies - only Electron, the desktop shell, is installed.
