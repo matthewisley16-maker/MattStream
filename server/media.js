@@ -71,6 +71,8 @@ function parseProbe(text) {
     audioChannels: 0,
     audioStreams: 0,
     subtitleStreams: 0,
+    coverStream: null,
+    coverCodec: null,
   };
 
   const duration = /Duration:\s*(\d+):(\d{2}):(\d{2})\.(\d+)/.exec(text);
@@ -84,6 +86,15 @@ function parseProbe(text) {
 
   const lines = text.split(/\r?\n/);
   for (const line of lines) {
+    // An "attached pic" is the film's own cover art, not a video track.
+    if (/\(attached pic\)/i.test(line)) {
+      const cover = /Stream #0:(\d+)[^:]*: Video: ([A-Za-z0-9_]+)/.exec(line);
+      if (cover && info.coverStream === null) {
+        info.coverStream = Number(cover[1]);
+        info.coverCodec = cover[2].toLowerCase();
+      }
+      continue;
+    }
     if (!info.videoCodec) {
       const video = /Stream #\d+:\d+[^:]*: Video: ([A-Za-z0-9_]+)/.exec(line);
       if (video) {

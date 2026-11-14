@@ -208,7 +208,15 @@ function readNfo(file) {
     if (value && !genres.includes(value)) genres.push(value);
   }
   const runtimeMinutes = Number(tagText(xml, 'runtime')) || 0;
-  const thumb = tagText(xml, 'thumb');
+  const thumbs = [];
+  const thumbRe = /<thumb[^>]*>([\s\S]*?)<\/thumb>/gi;
+  let thumbHit;
+  while ((thumbHit = thumbRe.exec(xml))) {
+    const value = thumbHit[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, '').trim();
+    if (value && !thumbs.includes(value)) thumbs.push(value);
+  }
+  const thumb = thumbs[0] || '';
+  const remote = thumbs.filter((value) => /^https?:\/\//i.test(value));
   return {
     path: file,
     title: tagText(xml, 'title'),
@@ -217,6 +225,8 @@ function readNfo(file) {
     genres: genres.slice(0, 6),
     runtime: runtimeMinutes ? runtimeMinutes * 60 : 0,
     thumbHint: thumb && !/^https?:/i.test(thumb) ? path.resolve(path.dirname(file), thumb) : '',
+    thumbUrl: remote[0] || '',
+    fanartUrl: remote[1] || '',
   };
 }
 
@@ -369,13 +379,16 @@ function itemFromFile({ file, dir, collected, library, info, existing }) {
     ? parsed.series || tidy(path.basename(dir).replace(/^(season|series)\s*\d+.*$/i, '')) || tidy(path.basename(path.dirname(dir)))
     : null;
 
-  const posterPath = findArt(collected, dir, POSTER_NAMES);
-  const backdropPath = findArt(collected, dir, BACKDROP_NAMES);
-  const mode = playbackMode(info, ext);
-
   const bucket = collected.get(dir);
   const base = path.basename(file, ext);
   const nfo = pickNfo(collected, dir, file);
+
+  // A cover named by the .nfo counts as metadata even when it is not called
+  // poster.jpg, so it beats a frame cut from the video.
+  const nfoCover = nfo && nfo.thumbHint && fs.existsSync(nfo.thumbHint) ? nfo.thumbHint : null;
+  const posterPath = findArt(collected, dir, POSTER_NAMES) || nfoCover;
+  const backdropPath = findArt(collected, dir, BACKDROP_NAMES);
+  const mode = playbackMode(info, ext);
 
   // Episodes can have their own still: <episode>.jpg, <episode>-thumb.jpg, thumb.jpg.
   let thumbPath = null;
@@ -436,6 +449,10 @@ function itemFromFile({ file, dir, collected, library, info, existing }) {
     playback: mode,
     posterPath: posterPath || null,
     backdropPath: backdropPath || null,
+    nfoPosterUrl: (nfo && nfo.thumbUrl) || null,
+    nfoBackdropUrl: (nfo && nfo.fanartUrl) || null,
+    coverStream: info && info.coverStream !== null && info.coverStream !== undefined ? info.coverStream : null,
+    coverCodec: (info && info.coverCodec) || null,
     subtitles,
     sizeLabel: prettySize(stat.size),
   };

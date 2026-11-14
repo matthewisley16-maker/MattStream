@@ -192,19 +192,79 @@ function extractFrame(item, kind) {
   });
 }
 
-// Fills in artwork from the video for anything the file system had none for.
+// Cover art stored inside the file itself (MKV/MP4 attachments). This is the
+// film's own artwork, so it is preferred over anything cut from the video.
+function extractEmbeddedCover(item) {
+  return new Promise((resolve) => {
+    if (item.coverStream === null || item.coverStream === undefined) return resolve(null);
+    const ext = /png/i.test(item.coverCodec || '') ? '.png' : '.jpg';
+    const out = path.join(ART_DIR, 'cover-' + item.id + ext);
+    try {
+      if (fs.existsSync(out) && fs.statSync(out).size > 1000) return resolve(out);
+    } catch (err) {
+      /* fall through and rebuild it */
+    }
+    if (!state.ffmpegOk) return resolve(null);
+    try {
+      fs.mkdirSync(ART_DIR, { recursive: true });
+    } catch (err) {
+      return resolve(null);
+    }
+    const child = spawn(
+      FFMPEG,
+      ['-hide_banner', '-loglevel', 'error', '-y', '-i', item.path, '-map', '0:' + item.coverStream, '-c', 'copy', '-frames:v', '1', out],
+      { windowsHide: true }
+    );
+    child.on('error', () => resolve(null));
+    child.on('exit', () => {
+      try {
+        resolve(fs.existsSync(out) && fs.statSync(out).size > 1000 ? out : null);
+      } catch (err) {
+        resolve(null);
+      }
+    });
+  });
+}
+
+// A real cover linked by an .nfo (Kodi-style <thumb>/<fanart> URL), saved once.
+async function fetchRemoteArt(url, item, kind) {
+  if (!url) return null;
+  const ext = /\.png(\?|$)/i.test(url) ? '.png' : '.jpg';
+  const out = path.join(ART_DIR, kind + '-' + item.id + ext);
+  try {
+    if (fs.existsSync(out) && fs.statSync(out).size > 1000) return out;
+  } catch (err) {
+    /* fall through */
+  }
+  try {
+    await fsp.mkdir(ART_DIR, { recursive: true });
+    return await tmdb.saveImage(url, out);
+  } catch (err) {
+    log('cover download failed for "' + item.title + '": ' + err.message);
+    return null;
+  }
+}
+
+// Fills in artwork for anything the file system had none for. A cover that the
+// file or its .nfo already carries is metadata, so it wins; a frame cut from
+// the video is only the last resort.
 async function addAutoArtwork(items) {
-  if (!state.ffmpegOk) return;
   for (const item of items) {
     if (!item.posterPath) {
-      const poster = await extractFrame(item, 'poster');
+      let poster = await extractEmbeddedCover(item);
+      if (!poster) poster = await fetchRemoteArt(item.nfoPosterUrl, item, 'cover');
+      if (!poster) poster = await extractFrame(item, 'poster');
       if (poster) item.posterPath = poster;
     }
     if (!item.backdropPath) {
-      const backdrop = await extractFrame(item, 'backdrop');
+      let backdrop = await fetchRemoteArt(item.nfoBackdropUrl, item, 'fanart');
+      if (!backdrop) backdrop = await extractFrame(item, 'backdrop');
       if (backdrop) item.backdropPath = backdrop;
     }
-    if (item.kind === 'episode' && !item.thumbPath && item.posterPath) item.thumbPath = item.posterPath;
+    if (item.kind === 'episode' && !item.thumbPath) {
+      const cover = await extractEmbeddedCover(item);
+      item.thumbPath = cover || item.posterPath || null;
+    }
   }
 }
 
@@ -890,7 +950,17 @@ async function handleApi(req, res, url) {
       if (file && path.resolve(file).startsWith(ART_DIR)) await fsp.unlink(file).catch(() => {});
     }
     for (const suffix of ['-poster.jpg', '-backdrop.jpg']) {
-      await fsp.unlink(path.join(ART_DIR, 'auto-' + item.id + suffix)).catch(() => {});
+      for (const extra of [
+        'auto-' + item.id + suffix,
+        'cover-' + item.id + '.jpg',
+        'cover-' + item.id + '.png',
+        'fanart-' + item.id + '.jpg',
+        'fanart-' + item.id + '.png',
+        'match-' + item.id + '-poster.jpg',
+        'match-' + item.id + '-backdrop.jpg',
+      ]) {
+        await fsp.unlink(path.join(ART_DIR, extra)).catch(() => {});
+      }
     }
 
     probeStore.update((data) => {

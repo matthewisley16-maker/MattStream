@@ -10,6 +10,10 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Added
 
+- **Cover art that already exists in the file or its `.nfo` is used** - a cover stored inside an
+  MKV/MP4 is extracted as the poster, and a Kodi-style `<thumb>`/`<fanart>` URL is fetched and saved
+  next to the library. A frame cut from the video is only used when neither exists.
+
 - **Your own library is the default** - `config/defaults.json` names this installation's library
   (`My Home Library` at `http://192.168.25.146:8096/`). The Windows app, the phone app and the TV app
   open on it and stream from it; anyone else edits or removes that file and points at their own server.
