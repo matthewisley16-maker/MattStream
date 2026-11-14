@@ -4,6 +4,7 @@
 
 const path = require("node:path");
 const { app, BrowserWindow, WebContentsView, ipcMain, shell, Menu, session } = require("electron");
+const { DownloadManager } = require("./downloads");
 
 const APP_ROOT = path.join(__dirname, "..");
 // Must match the .nav heights in index.html.
@@ -17,21 +18,29 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 let mainWindow = null;
 let siteView = null;
+let downloads = null;
 let headerInset = HEADER_HEIGHT;
+let panelInset = 0;
 let siteRetried = false;
 
 function layoutSiteView() {
   if (!siteView || !mainWindow) return;
   const [width, height] = mainWindow.getContentSize();
+  var inset = headerInset + panelInset;
   siteView.setBounds({
     x: 0,
-    y: headerInset,
+    y: inset,
     width,
-    height: Math.max(0, height - headerInset)
+    height: Math.max(0, height - inset)
   });
 }
 
 function closeSiteView() {
+  panelInset = 0;
+  if (downloads) {
+    downloads.releaseSiteView();
+    downloads.resetMedia();
+  }
   if (!siteView) return;
   try {
     if (mainWindow) mainWindow.contentView.removeChildView(siteView);
@@ -86,6 +95,8 @@ function openSite(url) {
   // Reuse the live view. Replacing it would throw away its navigation history,
   // so clicking another site or a link would always start a new window/stack.
   // Keeping one view means Back returns through the pages the user just visited.
+  panelInset = 0;
+  if (downloads) downloads.resetMedia();
   if (siteView) {
     headerInset = HEADER_HEIGHT;
     layoutSiteView();
@@ -107,6 +118,7 @@ function openSite(url) {
   mainWindow.contentView.addChildView(siteView);
   headerInset = HEADER_HEIGHT;
   layoutSiteView();
+  if (downloads) downloads.watchSiteView(siteView);
 
   // A transient failure (network hiccup, DNS) gets one silent retry instead of
   // showing the user an error screen.
@@ -212,8 +224,17 @@ ipcMain.handle("site:forward", function () {
 
 ipcMain.handle("site:chrome", function (_event, hidden) {
   headerInset = hidden ? COLLAPSED_HEIGHT : HEADER_HEIGHT;
+  if (hidden) panelInset = 0;
   layoutSiteView();
   return headerInset;
+});
+
+ipcMain.handle("site:downloads-panel", function (_event, open, height) {
+  if (!siteView) return 0;
+  var requested = Number(height);
+  panelInset = open && isFinite(requested) ? Math.max(0, Math.min(360, Math.round(requested))) : 0;
+  layoutSiteView();
+  return panelInset;
 });
 
 function siteSession() {
@@ -255,11 +276,57 @@ ipcMain.handle("data:clear-cookies", async function () {
 
 app.whenReady().then(function () {
   Menu.setApplicationMenu(null);
+
+  downloads = new DownloadManager({
+    getSiteView: function () { return siteView; },
+    getSession: siteSession,
+    send: function (state) {
+      if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send("downloads:state", state);
+      }
+    }
+  });
+
+  function downloadState() {
+    return downloads ? downloads.publicState() : { engine: false, media: [], jobs: [] };
+  }
+
+  ipcMain.handle("downloads:get", function () { return downloadState(); });
+  ipcMain.handle("downloads:start", function (_event, id, qualityId) {
+    if (!downloads || typeof id !== "string") return { ok: false, error: "That video is unavailable." };
+    return downloads.start(id, typeof qualityId === "string" ? qualityId : null);
+  });
+  ipcMain.handle("downloads:cancel", function (_event, id) {
+    if (!downloads || typeof id !== "string") return false;
+    return downloads.cancel(id);
+  });
+  ipcMain.handle("downloads:show", function (_event, id) {
+    if (!downloads || typeof id !== "string") return false;
+    return downloads.show(id);
+  });
+  ipcMain.handle("downloads:open-folder", function () {
+    return downloads ? downloads.openFolder() : "";
+  });
+  ipcMain.handle("downloads:clear-media", function () {
+    if (!downloads) return false;
+    downloads.resetMedia();
+    return true;
+  });
+  ipcMain.handle("downloads:clear-finished", function () {
+    if (!downloads) return false;
+    downloads.clearFinished();
+    return true;
+  });
+
   createWindow();
 
   app.on("activate", function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on("before-quit", function () {
+  if (downloads) downloads.stopAll();
 });
 
 app.on("window-all-closed", function () {

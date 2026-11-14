@@ -1,0 +1,19 @@
+{
+  "name": "MattStream",
+  "short_name": "MattStream",
+  "description": "Your own movie platform - any format, every screen in the house.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07070b",
+  "theme_color": "#07070b",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

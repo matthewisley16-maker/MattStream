@@ -8,8 +8,6 @@
   var pointer = { x: 0, y: 0, overlay: null };
   var lastPointerScrollAt = 0;
   var lastFocusScrollAt = 0;
-  var scrollMode = false;
-  var scrollBadge = null;
   var regionFocusTimer = 0;
   var focusCache = null;
   var focusCacheAt = 0;
@@ -25,7 +23,7 @@
     "[data-click], [data-toggle], [data-bs-toggle], [jsaction]";
   var HINT_RE = /(^|[\s_-])(poster|card|tile|movie|show|episode|channel|thumbnail|thumb|cover|artwork|icon|logo|button|btn|menu-item|nav-item|dropdown|toggle|option|select|choice|play|watch|source|server|quality|season|genre|pagination|page-item|page-link|next|prev|close|remove|clickable|result|search|entry|media|video|link|showcase)([\s_-]|$)/i;
   var CONTAINER_RE = /(^|[\s_-])(list|grid|row|shelf|carousel|slider|container|wrapper|section|panel|collection|results|items)([\s_-]|$)/i;
-  var REGION_SELECTOR = "aside, [role='dialog'], [role='menu'], " +
+  var REGION_SELECTOR = "aside, dialog[open], [role='dialog'], [aria-modal='true'], [role='menu'], " +
     "[class*='sidebar'], [id*='sidebar'], [class*='drawer'], [id*='drawer'], " +
     "[class*='side-menu'], [id*='side-menu'], [class*='sideMenu'], [id*='sideMenu'], " +
     "[class*='sidenav'], [id*='sidenav']";
@@ -214,6 +212,61 @@
     return y <= 12;
   }
 
+  function openPageOverlay() {
+    var nodes = [];
+    try {
+      nodes = document.querySelectorAll("dialog[open], [role='dialog'], [aria-modal='true']");
+    } catch (err) {
+      nodes = [];
+    }
+    for (var i = nodes.length - 1; i >= 0; i--) {
+      var node = nodes[i];
+      if (visible(node)) return node;
+    }
+    return null;
+  }
+
+  // Native Back asks the page whether it has an overlay to close before the
+  // shell changes WebView history. This keeps a site's dialog (or our TV
+  // category menu) from making Back jump to the previous page instead.
+  function closePageOverlay() {
+    var overlay = openPageOverlay();
+    if (!overlay) return false;
+    try {
+      document.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Escape", code: "Escape", bubbles: true
+      }));
+    } catch (err) {}
+    if (!visible(overlay)) return true;
+    if (overlay.tagName === "DIALOG" && overlay.open) {
+      try { overlay.close(); return true; } catch (err) {}
+    }
+    var close = null;
+    try {
+      close = overlay.querySelector(
+        "button[aria-label*='close' i], button[title*='close' i], " +
+        "[role='button'][aria-label*='close' i], [data-dismiss], [data-close], " +
+        "button[class*='close' i], [class*='close-button'], [class*='modal-close']");
+    } catch (err) {}
+    if (close && visible(close)) {
+      try { close.click(); return true; } catch (err) {}
+    }
+    return false;
+  }
+
+  function focusChrome() {
+    if (!window.__anystreamChromeBridge ||
+        typeof window.__anystreamChromeBridge.available !== "function" ||
+        typeof window.__anystreamChromeBridge.focus !== "function") return false;
+    try {
+      if (!window.__anystreamChromeBridge.available()) return false;
+      window.__anystreamChromeBridge.focus();
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
   // At the very top there is nothing above the first content row. Let Up
   // hand focus to an open sidebar so the remote can reach its entries.
   function focusTopSidebar() {
@@ -306,6 +359,21 @@
     focusCache = clean;
     focusCacheAt = now;
     return clean;
+  }
+
+  function onScreen(el) {
+    var r = rectOf(el);
+    return r.bottom > 0 && r.right > 0 && r.top < window.innerHeight && r.left < window.innerWidth;
+  }
+
+  // Start on something the user can actually see. The first interactive
+  // element is often an off-screen cookie/footer link on a long page.
+  function firstFocusable() {
+    var list = focusables();
+    for (var i = 0; i < list.length; i++) {
+      if (onScreen(list[i])) return list[i];
+    }
+    return list.length ? list[0] : null;
   }
 
   function classText(el) {
@@ -532,9 +600,14 @@
   }
 
   function prefersNativeTap(el) {
-    return !!(el && el.matches && (isMediaAction(el) || isClickableNode(el) ||
+    if (!el || !el.matches) return false;
+    // A real touch is important for more than poster cards: WebView does not
+    // add a scripted element.click() navigation to its back/forward history.
+    // A tap on an ordinary link gives Back the page it came from.
+    if (el.matches("a[href], area[href], button, summary, [role='button'], [role='link']")) return true;
+    return !!(isMediaAction(el) || isClickableNode(el) ||
       el.matches("[data-href], [data-url], [data-link], [data-action], " +
-        "[data-click], [data-toggle], [data-bs-toggle], [jsaction], [aria-haspopup]")));
+        "[data-click], [data-toggle], [data-bs-toggle], [jsaction], [aria-haspopup]"));
   }
 
   trackClickListeners();
@@ -552,8 +625,8 @@
     saved = null;
   }
 
-  function mark(el) {
-    if (focused === el) return;
+  function mark(el, force) {
+    if (focused === el && !force) return;
     restore();
     focused = el;
     if (!el) return;
@@ -586,6 +659,20 @@
     mark(el);
     try { el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" }); } catch (err) {}
     return true;
+  }
+
+  // While the native site toolbar owns the remote, its own focus outline is
+  // the only highlight. Hide the page ring until focus returns.
+  function setRingVisible(show) {
+    if (!show) {
+      restore();
+      return;
+    }
+    if (focused && document.documentElement.contains(focused) &&
+        (document.activeElement === focused || !document.activeElement ||
+          document.activeElement === document.body)) {
+      mark(focused, true);
+    }
   }
 
   function scroll(dir) {
@@ -629,7 +716,7 @@
     var active = document.activeElement;
     if (active && active !== document.body && list.indexOf(active) !== -1) current = active;
     else if (focused && list.indexOf(focused) !== -1) current = focused;
-    if (!current) return focusEl(list[0]);
+    if (!current) return focusEl(firstFocusable());
 
     var r = rectOf(current);
     var cx = r.left + r.width / 2;
@@ -668,7 +755,14 @@
       }
     });
 
-    if (!best) return dir === "up" ? focusTopSidebar() : false;
+    if (!best) {
+      if (dir === "up" && focusTopSidebar()) return true;
+      // At the very top of the page, Up hands the remote to the native site
+      // toolbar. From there arrows/OK control Back, Reload and Exit; Down
+      // returns to the page. A site dialog keeps focus inside itself.
+      if (dir === "up" && atPageTop() && !openPageOverlay() && focusChrome()) return true;
+      return scroll(dir);
+    }
     return focusEl(best);
   }
 
@@ -870,34 +964,6 @@
     return true;
   }
 
-  function showScrollBadge() {
-    if (!scrollBadge) {
-      scrollBadge = document.createElement("div");
-      scrollBadge.id = "__anystream_scroll_mode";
-      scrollBadge.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%);" +
-        "z-index:2147483647;pointer-events:none;color:#fff;background:transparent;" +
-        "font:600 13px sans-serif;text-shadow:0 1px 3px #000,0 0 8px #000;";
-      scrollBadge.textContent = "SCROLL MODE - hold OK 3s to exit";
-      document.documentElement.appendChild(scrollBadge);
-    }
-    scrollBadge.style.display = "block";
-  }
-
-  function toggleScrollMode() {
-    scrollMode = !scrollMode;
-    if (scrollMode) {
-      hidePointer();
-      showScrollBadge();
-    } else {
-      if (scrollBadge) scrollBadge.style.display = "none";
-      if (MODE === "pointer") {
-        ensurePointer();
-        drawPointer();
-      }
-    }
-    return scrollMode;
-  }
-
   function clickPointer() {
     ensurePointer();
     var stack = [];
@@ -952,10 +1018,6 @@
 
   function handle(key) {
     cancelRegionFocus();
-    if (scrollMode) {
-      if (key === "up" || key === "down") return scrollPage(key);
-      return true;
-    }
     if (key === "select") return MODE === "pointer" ? clickPointer() : selectFocus();
     if (key === "up" || key === "down" || key === "left" || key === "right") {
       return MODE === "pointer" ? movePointer(key) : moveFocus(key);
@@ -1003,7 +1065,7 @@
   // the visible ring with it. This keeps the D-pad's starting point and the
   // highlighted control in sync.
   document.addEventListener("focusin", function (event) {
-    if (MODE !== "dpad" || scrollMode) return;
+    if (MODE !== "dpad") return;
     var el = event.target;
     if (!el || el === document.body || el === document.documentElement || el === focused) return;
     try {
@@ -1025,11 +1087,12 @@
       drawPointer();
       return true;
     }
-    var list = focusables();
-    return list.length ? focusEl(list[0]) : false;
+    var first = firstFocusable();
+    return first ? focusEl(first) : false;
   };
   window.__anystreamSiteSetMode = setMode;
-  window.__anystreamSiteToggleScroll = toggleScrollMode;
+  window.__anystreamSiteBack = closePageOverlay;
+  window.__anystreamSiteRing = setRingVisible;
 
   document.addEventListener("keydown", function (event) {
     // The Android shell sets this flag and calls __anystreamSiteKey directly.
@@ -1060,8 +1123,14 @@
       if (MODE !== "dpad") return;
       var active = document.activeElement;
       if (!active || active === document.body || active === document.documentElement) {
-        var list = focusables();
-        if (list.length) focusEl(list[0]);
+        var first = firstFocusable();
+        if (first) focusEl(first);
+      } else {
+        // The page may have focused an element before this script was
+        // injected, so no focusin event marked it. Give it the same TV ring.
+        try {
+          if (visible(active) && (active.matches(SELECTOR) || isClickableNode(active))) mark(active);
+        } catch (err) {}
       }
     }, 350);
   }

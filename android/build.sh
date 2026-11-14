@@ -86,8 +86,8 @@ build_variant() {
   ls -lh "$OUT/$outname" | awk '{print "  size:", $5}'
 }
 
-build_variant phone "anystreamsitev1.1-phone.apk"
-build_variant tv "anystreamsitev1.1-android-tv.apk"
+build_variant phone "anystreamsitev1.1.3-phone.apk"
+build_variant tv "anystreamsitev1.1.3-android-tv.apk"
 
 echo "== done =="
 ls -lh "$OUT"/*.apk

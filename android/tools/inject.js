@@ -63,6 +63,7 @@ const dpad = tv ? `
   if (document.body) markTvPage();
   else document.addEventListener("DOMContentLoaded", markTvPage);
   var focusedEl = null;
+  var panelOpener = null;
   var tvMenu = null;
   var tvMenuCard = null;
   function shown(el) {
@@ -167,13 +168,35 @@ const dpad = tv ? `
   function movePanel(panel, dir) {
     var items = panelItems(panel);
     if (!items.length) return false;
-    var index = items.indexOf(currentIn(items));
-    if (index === -1) { focusedEl = null; focusEl(items[0]); reveal(items[0]); return true; }
-    var step = dir === "down" || dir === "right" ? 1 : -1;
-    var next = Math.min(items.length - 1, Math.max(0, index + step));
-    if (next === index) return false;
-    focusEl(items[next]);
-    reveal(items[next]);
+    var current = currentIn(items);
+    if (items.indexOf(current) === -1) {
+      focusedEl = null;
+      focusEl(items[0]);
+      reveal(items[0]);
+      return true;
+    }
+    var r = current.getBoundingClientRect();
+    var cx = r.left + r.width / 2;
+    var cy = r.top + r.height / 2;
+    var best = null;
+    var score = Infinity;
+    items.forEach(function (el) {
+      if (el === current) return;
+      var q = el.getBoundingClientRect();
+      var dx = q.left + q.width / 2 - cx;
+      var dy = q.top + q.height / 2 - cy;
+      var main;
+      var cross;
+      if (dir === "right") { if (dx < 4) return; main = dx; cross = Math.abs(dy); }
+      else if (dir === "left") { if (dx > -4) return; main = -dx; cross = Math.abs(dy); }
+      else if (dir === "down") { if (dy < 4) return; main = dy; cross = Math.abs(dx); }
+      else { if (dy > -4) return; main = -dy; cross = Math.abs(dx); }
+      var next = main + cross * 2.5;
+      if (next < score) { score = next; best = el; }
+    });
+    if (!best) return false;
+    focusEl(best);
+    reveal(best);
     return true;
   }
   function activate() {
@@ -331,14 +354,21 @@ const dpad = tv ? `
     closeTvMenu(true);
   }
 
-  function longSelect() {
-    if (openPanel()) return false;
+  function longSelectCard() {
+    if (openPanel()) return null;
     var target = document.activeElement;
     var card = target && target.closest ? target.closest(".card") : null;
     if (!card && focusedEl && focusedEl.closest) card = focusedEl.closest(".card");
-    if (!card) return false;
-    return openTvMenu(card);
+    return card;
   }
+  function canLongSelect() {
+    return !!longSelectCard();
+  }
+  function longSelect() {
+    var card = longSelectCard();
+    return card ? openTvMenu(card) : false;
+  }
+  window.__anystreamTvCanLongSelect = canLongSelect;
   window.__anystreamTvLongSelect = longSelect;
   function handleKey(key) {
     if (key === "longSelect") return longSelect();
@@ -357,20 +387,58 @@ const dpad = tv ? `
     el.classList.add("tv-focused");
   }, true);
 
-  // The library is rendered after the page script starts. If the initial
-  // focus call lands on the top bar before the cards exist, move to the first
-  // card as soon as the library appears (and after adding a first site).
+  // Remember which page control opened a modal. When that modal closes, the
+  // remote returns there instead of jumping to the first card, which made a
+  // Back followed by OK unexpectedly open a site.
+  document.addEventListener("click", function (event) {
+    if (openPanel()) return;
+    var opener = event.target && event.target.closest
+      ? event.target.closest("button, .btn, [role='button'], a") : null;
+    if (!opener) return;
+    panelOpener = opener;
+    setTimeout(function () {
+      if (!openPanel()) panelOpener = null;
+    }, 150);
+  }, true);
+
+  // Keep focus valid as the library and dialogs are replaced. The old code
+  // only watched for the first card, so closing a dialog or a search rerender
+  // could leave the remote pointing at a hidden element.
   function watchLibrary() {
     if (!document.body || !window.MutationObserver) return;
-    var hadCards = cards().length > 0;
-    new MutationObserver(function () {
-      var nowCards = cards().length;
-      if (nowCards > 0 && !hadCards && !openPanel()) {
+    var focusTimer = 0;
+    function checkFocusSoon() {
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(function () {
+        var panel = openPanel();
         var active = document.activeElement;
-        if (!active || active.tagName !== "INPUT") focusFirst();
-      }
-      hadCards = nowCards > 0;
-    }).observe(document.body, { childList: true, subtree: true });
+        if (panel) {
+          if (panel.contains(active) || (focusedEl && panel.contains(focusedEl))) return;
+          var items = panelItems(panel);
+          if (items.length) { focusEl(items[0]); reveal(items[0]); }
+          return;
+        }
+        if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA") && shown(active)) return;
+        if (!active || active === document.body || active === document.documentElement || !shown(active) || !document.documentElement.contains(active)) {
+          if (panelOpener && document.documentElement.contains(panelOpener) && shown(panelOpener) &&
+              (!panelOpener.closest || !panelOpener.closest(".backdrop"))) {
+            var restore = panelOpener;
+            panelOpener = null;
+            focusEl(restore);
+            reveal(restore);
+            return;
+          }
+          focusFirst();
+        }
+      }, 60);
+    }
+    new MutationObserver(checkFocusSoon).observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["hidden"]
+    });
+    checkFocusSoon();
   }
   if (document.body) watchLibrary();
   else document.addEventListener("DOMContentLoaded", watchLibrary);
@@ -396,11 +464,6 @@ const dpad = tv ? `
       event.stopPropagation();
     }
   }, true);
-  window.addEventListener("load", function () {
-    setTimeout(function () {
-      if (window.__anystreamTvFocus) window.__anystreamTvFocus();
-    }, 2800);
-  });
 })();
 </script>` : "";
 

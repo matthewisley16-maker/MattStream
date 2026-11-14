@@ -1,0 +1,5 @@
+data/
+node_modules/
+bin/ffmpeg.exe
+bin/ffmpeg
+*.log

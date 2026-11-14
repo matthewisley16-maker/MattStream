@@ -881,6 +881,119 @@ try {
   .chrome-btn.exit { padding: 0 12px; }
   .chrome-btn.exit:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 
+  /* ---------- video downloads (Windows shell) ---------- */
+  #nativeDownloads { display: none; position: relative; }
+  body.electron.native #nativeDownloads { display: inline-flex; }
+  body.native.chrome-collapsed #nativeDownloads { display: none; }
+  .downloads-label { white-space: nowrap; }
+  .downloads-badge {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 9.5px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .downloads-btn.has-new { animation: downloadsPulse 1.1s ease 2; border-color: rgba(var(--accent-rgb), 0.7); }
+  @keyframes downloadsPulse { 50% { background: var(--accent); color: #fff; border-color: var(--accent); } }
+  .downloads-panel {
+    position: fixed;
+    top: 68px;
+    left: 0;
+    right: 0;
+    height: 320px;
+    z-index: 55;
+    display: flex;
+    flex-direction: column;
+    background: #0b0b0b;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 24px 48px -30px #000;
+  }
+  .downloads-panel[hidden] { display: none; }
+  .downloads-head { flex: none; display: flex; align-items: center; gap: 12px; padding: 13px 20px 10px; }
+  .downloads-head h2 { margin: 0; font-size: 15px; letter-spacing: -0.01em; }
+  .downloads-head p { margin: 3px 0 0; color: var(--muted); font-size: 11.5px; }
+  .downloads-head-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .downloads-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 20px 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.9fr);
+    gap: 22px;
+  }
+  .downloads-section { min-width: 0; }
+  .downloads-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .downloads-section h3 { margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+  .downloads-mini { border: 0; background: none; padding: 3px 0; color: #8d8d8d; font-size: 10.5px; cursor: pointer; }
+  .downloads-mini:hover { color: var(--text); }
+  .dl-list { display: flex; flex-direction: column; gap: 6px; }
+  .dl-empty { padding: 16px; border: 1px dashed var(--line); border-radius: 9px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .dl-item, .dl-job {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 8px 9px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.035);
+  }
+  .dl-item-icon {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    display: grid;
+    place-items: center;
+    background: rgba(var(--accent-rgb), 0.16);
+    color: var(--accent-2);
+  }
+  .dl-item-main { flex: 1; min-width: 0; }
+  .dl-item-title { display: block; color: var(--text); font-size: 12px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl-item-meta, .dl-job-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl-download { flex: none; padding: 6px 10px; font-size: 10.5px; }
+  .dl-item-actions { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+  .dl-quality {
+    width: 145px;
+    max-width: 100%;
+    padding: 5px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--text);
+    font: inherit;
+    font-size: 10.5px;
+    cursor: pointer;
+  }
+  .dl-quality:focus { outline: 1px solid var(--accent); outline-offset: 1px; }
+  .dl-quality:disabled { opacity: 0.65; cursor: default; }
+  .dl-quality-note { color: var(--muted); font-size: 10px; white-space: nowrap; }
+  .dl-job { display: block; padding: 9px 10px; }
+  .dl-job-head { display: flex; align-items: baseline; gap: 8px; }
+  .dl-job-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 650; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl-job-state { flex: none; color: var(--muted); font-size: 10px; }
+  .dl-progress { height: 5px; margin-top: 7px; overflow: hidden; border-radius: 99px; background: rgba(255, 255, 255, 0.09); }
+  .dl-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 0.25s ease; }
+  .dl-progress.indeterminate > span { width: 38% !important; animation: dlIndeterminate 1.15s ease-in-out infinite; }
+  @keyframes dlIndeterminate { from { transform: translateX(-110%); } to { transform: translateX(320%); } }
+  .dl-job-foot { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+  .dl-job-meta { flex: 1; margin: 0; white-space: normal; }
+  .dl-job.error .dl-progress > span { background: #ff5a5a; }
+  .dl-job.error .dl-job-meta { color: #ff9b9b; white-space: normal; }
+  .dl-job.complete .dl-progress > span { background: #28c76f; }
+  .dl-link { border: 0; background: none; padding: 2px 0; color: var(--accent-2); font-size: 10.5px; font-weight: 600; cursor: pointer; }
+  .dl-link:hover { color: #fff; }
+  .downloads-note { flex: none; margin: 0; padding: 7px 20px 9px; color: #777; font-size: 10.5px; line-height: 1.4; border-top: 1px solid var(--line); }
+  .downloads-note strong { color: #a8a8a8; font-weight: 600; }
+  .downloads-error { flex: none; margin: 0 20px 6px; padding: 6px 9px; border-radius: 7px; background: rgba(255, 90, 90, 0.12); color: #ff9b9b; font-size: 11px; }
+  @media (max-width: 900px) { .downloads-scroll { grid-template-columns: minmax(0, 1fr); } }
+
   /* collapsed site menu: a slim strip with just the handle */
   body.native.chrome-collapsed .nav {
     height: 30px;
@@ -991,6 +1104,18 @@ try {
   html[data-mode="light"] .chrome-btn { background: rgba(0, 0, 0, 0.05); color: #2a2a2a; border-color: rgba(0, 0, 0, 0.1); }
   html[data-mode="light"] .chrome-btn:hover:not(:disabled) { background: #16161a; color: #ffffff; border-color: #16161a; }
   html[data-mode="light"] .toast { background: #16161a; color: #ffffff; }
+  html[data-mode="light"] .downloads-panel { background: #ffffff; box-shadow: 0 24px 48px -34px rgba(0, 0, 0, 0.35); }
+  html[data-mode="light"] .dl-item,
+  html[data-mode="light"] .dl-job { background: rgba(0, 0, 0, 0.025); }
+  html[data-mode="light"] .dl-empty { color: #6a6a70; border-color: rgba(0, 0, 0, 0.14); }
+  html[data-mode="light"] .downloads-mini { color: #77777d; }
+  html[data-mode="light"] .downloads-mini:hover { color: #16161a; }
+  html[data-mode="light"] .dl-progress { background: rgba(0, 0, 0, 0.1); }
+  html[data-mode="light"] .downloads-note { color: #77777d; }
+  html[data-mode="light"] .downloads-note strong { color: #44444a; }
+  html[data-mode="light"] .dl-link:hover { color: #16161a; }
+  html[data-mode="light"] .dl-quality { background: #ffffff; border-color: #dcdce0; color: #16161a; }
+  html[data-mode="light"] .downloads-error { background: rgba(190, 30, 45, 0.08); color: #b01e2d; }
   html[data-mode="light"] .launch { background: radial-gradient(60% 60% at 50% 45%, rgba(var(--accent-rgb), 0.12), transparent 70%), #ffffff; }
   html[data-mode="light"] .launch-icon .site-icon { background: #f2f2f4; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.07), 0 30px 70px -34px rgba(var(--accent-rgb), 0.7); }
   html[data-mode="light"] .launch-name { color: #55555c; }
@@ -1144,6 +1269,11 @@ try {
     <button class="chrome-btn" id="nativeReload" type="button" title="Reload site" aria-label="Reload site">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
     </button>
+    <button class="chrome-btn downloads-btn" id="nativeDownloads" type="button" title="Video downloads" aria-label="Video downloads" aria-expanded="false" aria-controls="downloadsPanel">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 18v2h16v-2"/></svg>
+      <span class="downloads-label">Downloads</span>
+      <span class="downloads-badge" id="downloadsBadge" hidden>0</span>
+    </button>
     <div class="nav-native-title">
       <span class="nav-native-name" id="nativeName"></span>
       <span class="nav-native-host" id="nativeHost"></span>
@@ -1157,6 +1287,37 @@ try {
     </button>
   </div>
 </header>
+
+<section class="downloads-panel" id="downloadsPanel" hidden aria-label="Video downloads">
+  <div class="downloads-head">
+    <div>
+      <h2>Video downloads</h2>
+      <p>Saves video from the site you are viewing.</p>
+    </div>
+    <div class="downloads-head-actions">
+      <button class="chrome-btn" id="downloadsFolder" type="button">Open folder</button>
+      <button class="chrome-btn" id="downloadsClose" type="button">Close</button>
+    </div>
+  </div>
+  <div class="downloads-scroll">
+    <section class="downloads-section">
+      <div class="downloads-section-head">
+        <h3>Streams found</h3>
+        <button class="downloads-mini" id="downloadsClear" type="button">Clear list</button>
+      </div>
+      <div class="dl-list" id="downloadsStreams"></div>
+    </section>
+    <section class="downloads-section">
+      <div class="downloads-section-head">
+        <h3>Downloads</h3>
+        <button class="downloads-mini" id="downloadsClearFinished" type="button">Clear finished</button>
+      </div>
+      <div class="dl-list" id="downloadsJobs" aria-live="polite"></div>
+    </section>
+  </div>
+  <p class="downloads-error" id="downloadsError" role="alert" hidden></p>
+  <p class="downloads-note"><strong>Only save videos you have the right to keep.</strong> Encrypted, DRM-protected and live streams cannot be downloaded.</p>
+</section>
 
 <section class="hero">
   <span class="eyebrow">Your streaming home</span>
@@ -1430,6 +1591,16 @@ try {
   var toastTimer = null;
   var tvCategoryButton = document.getElementById("tvCategoryButton");
   var tvCategoryMenu = document.getElementById("tvCategoryMenu");
+  var downloadsPanel = document.getElementById("downloadsPanel");
+  var downloadsStreamsEl = document.getElementById("downloadsStreams");
+  var downloadsJobsEl = document.getElementById("downloadsJobs");
+  var downloadsBadge = document.getElementById("downloadsBadge");
+  var downloadsButton = document.getElementById("nativeDownloads");
+  var downloadsError = document.getElementById("downloadsError");
+  var downloadsState = { engine: true, media: [], jobs: [] };
+  var downloadsOpen = false;
+  var downloadsSeen = 0;
+  var downloadsQualityChoices = {};
 
   /* ---------------- helpers ---------------- */
 
@@ -1489,6 +1660,179 @@ try {
     toastEl.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2600);
+  }
+
+  /* ---------------- video downloads ---------------- */
+
+  var DOWNLOAD_ACTIVE = { checking: 1, downloading: 1, processing: 1 };
+
+  function formatBytes(bytes) {
+    var value = Number(bytes) || 0;
+    if (value < 1024) return value + " B";
+    if (value < 1024 * 1024) return (value / 1024).toFixed(value < 10240 ? 1 : 0) + " KB";
+    if (value < 1024 * 1024 * 1024) return (value / (1024 * 1024)).toFixed(value < 10 * 1024 * 1024 ? 1 : 0) + " MB";
+    return (value / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+  }
+
+  function formatDuration(seconds) {
+    var value = Math.max(0, Math.round(Number(seconds) || 0));
+    var hours = Math.floor(value / 3600);
+    var minutes = Math.floor((value % 3600) / 60);
+    var secs = value % 60;
+    if (hours) return hours + ":" + String(minutes).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+    return minutes + ":" + String(secs).padStart(2, "0");
+  }
+
+  function downloadStateLabel(state) {
+    if (state === "checking") return "Checking stream";
+    if (state === "downloading") return "Downloading";
+    if (state === "processing") return "Finishing";
+    if (state === "complete") return "Saved";
+    if (state === "cancelled") return "Cancelled";
+    return "Failed";
+  }
+
+  function downloadsPanelHeight() {
+    return Math.min(320, Math.max(220, Math.round((window.innerHeight - 68) * 0.45)));
+  }
+
+  function showDownloadsError(message) {
+    if (!downloadsError) return;
+    downloadsError.textContent = message || "";
+    downloadsError.hidden = !message;
+  }
+
+  function renderDownloads() {
+    if (!downloadsStreamsEl || !downloadsJobsEl) return;
+    var media = downloadsState.media || [];
+    var jobs = downloadsState.jobs || [];
+    var activeByMedia = {};
+    jobs.forEach(function (job) {
+      if (DOWNLOAD_ACTIVE[job.state]) activeByMedia[job.mediaId] = job;
+    });
+
+    downloadsStreamsEl.innerHTML = media.length ? media.map(function (item) {
+      var active = activeByMedia[item.id];
+      var type = item.kind === "hls" ? "HLS stream" : ((item.ext || ".mp4").replace(".", "").toUpperCase() + " video");
+      var qualityControl = "";
+      if (item.kind === "hls") {
+        if (item.qualityState === "loading") {
+          qualityControl = '<select class="dl-quality" disabled aria-label="Available qualities"><option>Checking qualities…</option></select>';
+        } else if (item.qualities && item.qualities.length) {
+          var selectedQuality = downloadsQualityChoices[item.id];
+          var qualityExists = item.qualities.some(function (quality) { return quality.id === selectedQuality; });
+          if (!qualityExists) {
+            selectedQuality = item.qualities[0].id;
+            downloadsQualityChoices[item.id] = selectedQuality;
+          }
+          qualityControl = '<select class="dl-quality" data-dl-quality="' + esc(item.id) + '" aria-label="Quality for ' + esc(item.title || "video") + '"' + (item.qualities.length === 1 ? " disabled" : "") + '>' +
+            item.qualities.map(function (quality) {
+              return '<option value="' + esc(quality.id) + '"' + (quality.id === selectedQuality ? " selected" : "") + '>' + esc(quality.label) + '</option>';
+            }).join("") + '</select>';
+        } else {
+          qualityControl = '<span class="dl-quality-note" title="' + esc(item.qualityError || "") + '">Best available</span>';
+        }
+      }
+      var action = active
+        ? '<button class="btn btn-ghost dl-download" type="button" disabled>Downloading</button>'
+        : '<button class="btn btn-ghost dl-download" type="button" data-dl-start="' + esc(item.id) + '">Download</button>';
+      return '<div class="dl-item">' +
+        '<div class="dl-item-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 18v2h16v-2"/></svg></div>' +
+        '<div class="dl-item-main"><span class="dl-item-title">' + esc(item.title || "Video") + '</span>' +
+          '<span class="dl-item-meta">' + esc(type + (item.host ? " · " + item.host : "")) + '</span></div>' +
+        '<div class="dl-item-actions">' + qualityControl + action + '</div>' +
+      '</div>';
+    }).join("") : '<div class="dl-empty">Play a movie or episode, then press play. Unencrypted streams the app can save will appear here.</div>';
+
+    downloadsJobsEl.innerHTML = jobs.length ? jobs.map(function (job) {
+      var active = !!DOWNLOAD_ACTIVE[job.state];
+      var complete = job.state === "complete";
+      var failed = job.state === "error" || job.state === "cancelled";
+      var percent = complete ? 100 : (typeof job.percent === "number" ? Math.round(job.percent * 100) : null);
+      var width = failed ? 100 : (percent === null ? 38 : Math.max(0, Math.min(100, percent)));
+      var progressClass = "dl-progress" + (percent === null && active ? " indeterminate" : "");
+      var meta = "Saving to Downloads…";
+      var qualityPrefix = job.qualityLabel ? job.qualityLabel + " · " : "";
+      if (failed) meta = job.error || (job.state === "cancelled" ? "Cancelled." : "Download failed.");
+      else if (complete) meta = qualityPrefix + (job.fileName || "Video") + (job.received ? " · " + formatBytes(job.received) : "");
+      else if (job.duration > 0) meta = qualityPrefix + formatDuration(job.elapsed) + " / " + formatDuration(job.duration) + (job.received ? " · " + formatBytes(job.received) : "");
+      else if (job.received > 0) meta = qualityPrefix + formatBytes(job.received) + (job.total > 0 ? " / " + formatBytes(job.total) : "");
+      else if (job.state === "checking") meta = "Checking the stream…";
+      var actions = active
+        ? '<button class="dl-link" type="button" data-dl-cancel="' + esc(job.id) + '">Cancel</button>'
+        : (complete ? '<button class="dl-link" type="button" data-dl-show="' + esc(job.id) + '">Show in folder</button>' : "");
+      return '<div class="dl-job ' + esc(job.state) + '">' +
+        '<div class="dl-job-head"><span class="dl-job-title">' + esc(job.title || "Video") + '</span><span class="dl-job-state">' + esc(downloadStateLabel(job.state)) + '</span></div>' +
+        '<div class="' + progressClass + '"><span style="width:' + width + '%"></span></div>' +
+        '<div class="dl-job-foot"><span class="dl-job-meta">' + esc(meta) + '</span>' + actions + '</div>' +
+      '</div>';
+    }).join("") : '<div class="dl-empty">Nothing downloaded yet.</div>';
+
+    var badgeCount = media.length + jobs.filter(function (job) { return !!DOWNLOAD_ACTIVE[job.state]; }).length;
+    if (downloadsBadge) {
+      downloadsBadge.hidden = badgeCount === 0;
+      downloadsBadge.textContent = badgeCount > 9 ? "9+" : String(badgeCount);
+    }
+    if (downloadsButton) {
+      downloadsButton.title = media.length ? "Video downloads (" + media.length + ")" : "Video downloads";
+      downloadsButton.setAttribute("aria-label", downloadsButton.title);
+      if (downloadsOpen || !electronSiteOpen) downloadsButton.classList.remove("has-new");
+      if (media.length > downloadsSeen && !downloadsOpen && electronSiteOpen) downloadsButton.classList.add("has-new");
+    }
+    downloadsSeen = media.length;
+  }
+
+  function openDownloadsPanel() {
+    if (!electronSiteOpen || !electronApi || typeof electronApi.setDownloadsPanel !== "function") return;
+    downloadsOpen = true;
+    downloadsPanel.hidden = false;
+    document.body.classList.add("downloads-open");
+    var height = downloadsPanelHeight();
+    downloadsPanel.style.height = height + "px";
+    downloadsButton.setAttribute("aria-expanded", "true");
+    downloadsButton.classList.remove("has-new");
+    showDownloadsError("");
+    renderDownloads();
+    electronApi.setDownloadsPanel(true, height).catch(function () {});
+    if (typeof electronApi.getDownloads === "function") {
+      electronApi.getDownloads().then(function (state) {
+        if (downloadsOpen && state) {
+          downloadsState = state;
+          renderDownloads();
+        }
+      }).catch(function () {});
+    }
+  }
+
+  function closeDownloadsPanel() {
+    if (!downloadsOpen && downloadsPanel.hidden) return;
+    downloadsOpen = false;
+    downloadsPanel.hidden = true;
+    document.body.classList.remove("downloads-open");
+    if (downloadsButton) downloadsButton.setAttribute("aria-expanded", "false");
+    showDownloadsError("");
+    if (electronApi && typeof electronApi.setDownloadsPanel === "function") {
+      electronApi.setDownloadsPanel(false, 0).catch(function () {});
+    }
+  }
+
+  function startMediaDownload(mediaId, qualityId, button) {
+    if (!electronApi || typeof electronApi.startDownload !== "function") return;
+    if (button && button.disabled) return;
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Starting…";
+    }
+    showDownloadsError("");
+    Promise.resolve(electronApi.startDownload(mediaId, qualityId)).then(function (result) {
+      if (!result || !result.ok) {
+        showDownloadsError((result && result.error) || "That video could not be started.");
+        renderDownloads();
+      }
+    }).catch(function () {
+      showDownloadsError("That video could not be started.");
+      renderDownloads();
+    });
   }
 
   function storage() {
@@ -2258,12 +2602,19 @@ try {
       btn.title = label;
       btn.setAttribute("aria-label", label);
     }
+    if (hidden) closeDownloadsPanel();
     if (electronApi && electronApi.setChromeHidden) electronApi.setChromeHidden(hidden);
   }
 
   function openElectronSite(site) {
     activeSite = site;
     electronSiteOpen = true;
+    closeDownloadsPanel();
+    downloadsState.media = [];
+    downloadsSeen = 0;
+    downloadsQualityChoices = {};
+    showDownloadsError("");
+    renderDownloads();
     document.body.classList.add("native");
     document.getElementById("nativeName").textContent = site.name;
     document.getElementById("nativeHost").textContent = hostOf(site.url);
@@ -2273,6 +2624,11 @@ try {
 
   function leaveElectronSite() {
     if (!electronSiteOpen) return;
+    closeDownloadsPanel();
+    downloadsState.media = [];
+    downloadsSeen = 0;
+    downloadsQualityChoices = {};
+    renderDownloads();
     electronSiteOpen = false;
     activeSite = null;
     document.body.classList.remove("native");
@@ -2346,7 +2702,8 @@ try {
 
   document.addEventListener("keydown", function (event) {
     if (event.key !== "Escape") return;
-    if (!viewer.hidden) closeViewer();
+    if (downloadsOpen) closeDownloadsPanel();
+    else if (!viewer.hidden) closeViewer();
     else if (!settingsModal.hidden) closeSettings();
     else if (!modal.hidden) closeModal();
     else if (!welcomeModal.hidden) closeWelcome();
@@ -2408,6 +2765,67 @@ try {
     if (electronApi.onSiteClosed) {
       electronApi.onSiteClosed(function () { leaveElectronSite(); });
     }
+
+    if (downloadsButton) {
+      downloadsButton.addEventListener("click", function () {
+        if (downloadsOpen) closeDownloadsPanel();
+        else openDownloadsPanel();
+      });
+    }
+    document.getElementById("downloadsClose").addEventListener("click", closeDownloadsPanel);
+    document.getElementById("downloadsFolder").addEventListener("click", function () {
+      if (electronApi.openDownloadsFolder) electronApi.openDownloadsFolder().catch(function () {});
+    });
+    document.getElementById("downloadsClear").addEventListener("click", function () {
+      if (electronApi.clearDetectedDownloads) electronApi.clearDetectedDownloads().catch(function () {});
+    });
+    document.getElementById("downloadsClearFinished").addEventListener("click", function () {
+      if (electronApi.clearFinishedDownloads) electronApi.clearFinishedDownloads().catch(function () {});
+    });
+    downloadsPanel.addEventListener("click", function (event) {
+      var start = event.target.closest("[data-dl-start]");
+      if (start) {
+        var mediaId = start.getAttribute("data-dl-start");
+        var item = start.closest(".dl-item");
+        var qualitySelect = item ? item.querySelector("[data-dl-quality]") : null;
+        startMediaDownload(mediaId, qualitySelect ? qualitySelect.value : downloadsQualityChoices[mediaId], start);
+        return;
+      }
+      var cancel = event.target.closest("[data-dl-cancel]");
+      if (cancel && electronApi.cancelDownload) {
+        electronApi.cancelDownload(cancel.getAttribute("data-dl-cancel")).catch(function () {});
+        return;
+      }
+      var show = event.target.closest("[data-dl-show]");
+      if (show && electronApi.showDownload) {
+        electronApi.showDownload(show.getAttribute("data-dl-show")).catch(function () {});
+      }
+    });
+    downloadsPanel.addEventListener("change", function (event) {
+      var quality = event.target.closest("[data-dl-quality]");
+      if (!quality) return;
+      downloadsQualityChoices[quality.getAttribute("data-dl-quality")] = quality.value;
+    });
+    if (electronApi.onDownloadsState) {
+      electronApi.onDownloadsState(function (state) {
+        if (!state || !Array.isArray(state.media) || !Array.isArray(state.jobs)) return;
+        downloadsState = state;
+        renderDownloads();
+      });
+    }
+    if (electronApi.getDownloads) {
+      electronApi.getDownloads().then(function (state) {
+        if (!state || !Array.isArray(state.media) || !Array.isArray(state.jobs)) return;
+        downloadsState = state;
+        renderDownloads();
+      }).catch(function () {});
+    }
+    window.addEventListener("resize", function () {
+      if (!downloadsOpen) return;
+      var height = downloadsPanelHeight();
+      downloadsPanel.style.height = height + "px";
+      if (electronApi.setDownloadsPanel) electronApi.setDownloadsPanel(true, height).catch(function () {});
+    });
   }
 
   render();

@@ -2,15 +2,16 @@ package com.anystreamsite.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.graphics.Rect;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
@@ -19,6 +20,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.ValueCallback;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
@@ -35,6 +37,7 @@ public class SiteActivity extends Activity {
     private WebView web;
     private ImageButton backBtn;
     private ImageButton forwardBtn;
+    private ImageButton reloadBtn;
     private ProgressBar progress;
     private FrameLayout stage;
     private View chrome;
@@ -44,17 +47,9 @@ public class SiteActivity extends Activity {
     private boolean tv;
     private String siteNavMode;
     private String siteDpadScript;
-    private final Handler keyHandler = new Handler(Looper.getMainLooper());
-    private boolean selectLongPressFired;
-    private final Runnable selectLongPressRunnable = new Runnable() {
-        @Override public void run() {
-            selectLongPressFired = true;
-            if (web != null) {
-                web.evaluateJavascript(
-                        "window.__anystreamSiteToggleScroll && window.__anystreamSiteToggleScroll()", null);
-            }
-        }
-    };
+    private long lastDirectionAt;
+    private int lastDirectionCode;
+    private boolean chromeFocused;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -69,6 +64,7 @@ public class SiteActivity extends Activity {
         if (!"pointer".equals(siteNavMode)) siteNavMode = "dpad";
         backBtn = (ImageButton) findViewById(R.id.backBtn);
         forwardBtn = (ImageButton) findViewById(R.id.forwardBtn);
+        reloadBtn = (ImageButton) findViewById(R.id.reloadBtn);
         progress = (ProgressBar) findViewById(R.id.progress);
         stage = (FrameLayout) findViewById(R.id.stage);
         chrome = findViewById(R.id.chrome);
@@ -100,6 +96,12 @@ public class SiteActivity extends Activity {
         if (tv) {
             web.addJavascriptInterface(new PointerBridge(), "__anystreamPointerBridge");
             web.addJavascriptInterface(new KeyboardBridge(), "__anystreamKeyboardBridge");
+            web.addJavascriptInterface(new ChromeBridge(), "__anystreamChromeBridge");
+            int focusBg = R.drawable.tv_chrome_focus;
+            backBtn.setBackgroundResource(focusBg);
+            forwardBtn.setBackgroundResource(focusBg);
+            reloadBtn.setBackgroundResource(focusBg);
+            findViewById(R.id.exitBtn).setBackgroundResource(focusBg);
         }
 
         // Same persistent cookie jar as the library, so sign-ins stick between
@@ -112,18 +114,6 @@ public class SiteActivity extends Activity {
         if (tv) {
             web.setFocusable(true);
             web.setFocusableInTouchMode(true);
-            web.setOnKeyListener(new View.OnKeyListener() {
-                @Override
-                public boolean onKey(View v, int keyCode, KeyEvent event) {
-                    // While the IME is open the remote belongs to the keyboard,
-                    // not to the page focus controller.
-                    if (isKeyboardVisible()) return false;
-                    String key = Tv.keyFor(keyCode);
-                    if (key == null) return false;
-                    if (event.getAction() == KeyEvent.ACTION_DOWN) sendSiteKey(key);
-                    return true;
-                }
-            });
         }
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -134,6 +124,7 @@ public class SiteActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String target) {
+                chromeFocused = false;
                 updateNav();
                 if (tv) {
                     view.requestFocus();
@@ -166,29 +157,30 @@ public class SiteActivity extends Activity {
 
             @Override
             public void onHideCustomView() {
-                if (customView == null) return;
-                stage.removeView(customView);
-                customView = null;
-                if (customCallback != null) customCallback.onCustomViewHidden();
-                customCallback = null;
-                applyImmersive(false);
+                exitCustomView();
             }
         });
 
         findViewById(R.id.exitBtn).setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { finish(); }
         });
-        findViewById(R.id.reloadBtn).setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { web.reload(); }
+        reloadBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                leaveChrome(false);
+                web.reload();
+            }
         });
         backBtn.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                if (web.canGoBack()) web.goBack();
-                else finish();
+                leaveChrome(false);
+                handleSiteBack();
             }
         });
         forwardBtn.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { if (web.canGoForward()) web.goForward(); }
+            @Override public void onClick(View v) {
+                leaveChrome(false);
+                if (web.canGoForward()) web.goForward();
+            }
         });
 
         updateNav();
@@ -275,11 +267,76 @@ public class SiteActivity extends Activity {
         }
     }
 
+    /** The page can hand focus to the native site toolbar with Up at the top. */
+    private final class ChromeBridge {
+        @JavascriptInterface
+        public boolean available() {
+            return !chromeHidden && customView == null;
+        }
+
+        @JavascriptInterface
+        public void focus() {
+            runOnUiThread(new Runnable() {
+                @Override public void run() { focusChromeNative(); }
+            });
+        }
+    }
+
+    private void focusChromeNative() {
+        if (!tv || chromeHidden || customView != null || chrome == null) return;
+        chromeFocused = true;
+        View target = backBtn != null && backBtn.isEnabled() ? backBtn : reloadBtn;
+        if (target != null) target.requestFocus();
+        setPageRing(false);
+    }
+
+    private void leaveChrome(boolean moveDown) {
+        chromeFocused = false;
+        if (web == null) return;
+        web.requestFocus();
+        setPageRing(true);
+        if (moveDown) sendSiteKey("down");
+    }
+
+    private void setPageRing(boolean show) {
+        if (web == null) return;
+        web.evaluateJavascript(
+                "window.__anystreamSiteRing && window.__anystreamSiteRing(" + show + ")", null);
+    }
+
+    /** Ask the page to close its dialog first, then fall back to history. */
+    private void handleSiteBack() {
+        if (web == null) {
+            finish();
+            return;
+        }
+        web.evaluateJavascript(
+                "window.__anystreamSiteBack ? window.__anystreamSiteBack() : false",
+                new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String handled) {
+                        if ("true".equals(handled)) return;
+                        if (web != null && web.canGoBack()) {
+                            web.goBack();
+                            updateNav();
+                        } else {
+                            finish();
+                        }
+                    }
+                });
+    }
+
     private boolean isKeyboardVisible() {
+        if (web == null) return false;
         try {
-            InputMethodManager input =
-                    (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-            return input != null && input.isAcceptingText();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                WindowInsets insets = web.getRootWindowInsets();
+                if (insets != null && insets.isVisible(WindowInsets.Type.ime())) return true;
+            }
+            Rect visible = new Rect();
+            web.getWindowVisibleDisplayFrame(visible);
+            int screenHeight = web.getRootView().getHeight();
+            return screenHeight > 0 && screenHeight - visible.bottom > screenHeight * 0.15;
         } catch (Throwable err) {
             return false;
         }
@@ -291,29 +348,44 @@ public class SiteActivity extends Activity {
         // The on-screen keyboard needs the D-pad and OK to choose letters.
         // Let the IME consume them instead of driving the site controller.
         if (isKeyboardVisible()) return super.dispatchKeyEvent(event);
+        // Menu is a reliable path to the native site toolbar on remotes that
+        // do not send an edge-up event at the top of the page.
+        if (event.getKeyCode() == KeyEvent.KEYCODE_MENU) {
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                if (chromeFocused) leaveChrome(false);
+                else focusChromeNative();
+            }
+            return true;
+        }
+        if (chromeFocused) {
+            int code = event.getKeyCode();
+            if (event.getAction() == KeyEvent.ACTION_DOWN &&
+                    (code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_UP)) {
+                leaveChrome(code == KeyEvent.KEYCODE_DPAD_DOWN);
+                return true;
+            }
+            // Let Android move focus between the native toolbar buttons and
+            // activate the focused one with OK.
+            return super.dispatchKeyEvent(event);
+        }
         String key = Tv.keyFor(event.getKeyCode());
         if (key == null) return super.dispatchKeyEvent(event);
         if ("select".equals(key)) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (event.getRepeatCount() == 0) {
-                    selectLongPressFired = false;
-                    keyHandler.removeCallbacks(selectLongPressRunnable);
-                    keyHandler.postDelayed(selectLongPressRunnable, 3000);
-                }
-                return true;
-            }
             if (event.getAction() == KeyEvent.ACTION_UP) {
-                keyHandler.removeCallbacks(selectLongPressRunnable);
-                if (!selectLongPressFired) sendSiteKey("select");
-                selectLongPressFired = false;
+                sendSiteKey("select");
                 return true;
             }
+            return true;
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            // Keep the toolbar's height stable while the D-pad moves through
-            // a site; hiding it on Down made the page jump under focus.
+            long now = SystemClock.uptimeMillis();
+            boolean repeat = event.getRepeatCount() > 0;
+            if (!repeat || event.getKeyCode() != lastDirectionCode || now - lastDirectionAt >= 85) {
+                sendSiteKey(key);
+                lastDirectionAt = now;
+                lastDirectionCode = event.getKeyCode();
+            }
         }
-        if (event.getAction() == KeyEvent.ACTION_DOWN) sendSiteKey(key);
         return true;
     }
 
@@ -342,6 +414,7 @@ public class SiteActivity extends Activity {
     private void applyImmersive(boolean on) {
         View chrome = findViewById(R.id.chrome);
         if (on) {
+            chromeFocused = false;
             chrome.setVisibility(View.GONE);
             chromeHidden = true;
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -357,6 +430,16 @@ public class SiteActivity extends Activity {
         }
     }
 
+    private void exitCustomView() {
+        if (customView == null) return;
+        stage.removeView(customView);
+        customView = null;
+        if (customCallback != null) customCallback.onCustomViewHidden();
+        customCallback = null;
+        applyImmersive(false);
+        if (web != null) web.requestFocus();
+    }
+
     private String hostOf(String url) {
         try {
             String host = Uri.parse(url).getHost();
@@ -369,6 +452,10 @@ public class SiteActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (customView != null) {
+            exitCustomView();
+            return;
+        }
         if (isKeyboardVisible()) {
             InputMethodManager input =
                     (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
@@ -377,20 +464,12 @@ public class SiteActivity extends Activity {
             }
             return;
         }
-        if (customView == null && web != null && web.canGoBack()) {
-            web.goBack();
-            updateNav();
-            return;
-        }
-        // The site has no more history: return to the app's library/home
-        // screen instead of closing the whole task.
-        finish();
+        handleSiteBack();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        keyHandler.removeCallbacks(selectLongPressRunnable);
         if (web != null) web.onPause();
         try {
             CookieManager.getInstance().flush();
@@ -409,7 +488,6 @@ public class SiteActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        keyHandler.removeCallbacks(selectLongPressRunnable);
         if (web != null) {
             stage.removeAllViews();
             web.destroy();

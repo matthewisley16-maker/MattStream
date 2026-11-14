@@ -3,11 +3,16 @@ package com.anystreamsite.app;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.HapticFeedbackConstants;
+import android.view.WindowInsets;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -28,11 +33,15 @@ public class MainActivity extends Activity {
     private final Handler keyHandler = new Handler(Looper.getMainLooper());
     private boolean selectDown;
     private boolean selectLongFired;
+    private boolean selectLongEligible;
+    private long lastDirectionAt;
+    private int lastDirectionCode;
     private final Runnable longSelect = new Runnable() {
         @Override
         public void run() {
-            if (!selectDown || web == null) return;
+            if (!selectDown || !selectLongEligible || web == null) return;
             selectLongFired = true;
+            web.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             web.evaluateJavascript(
                     "window.__anystreamTvLongSelect && window.__anystreamTvLongSelect()", null);
         }
@@ -97,6 +106,19 @@ public class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (!tv) return super.dispatchKeyEvent(event);
 
+        // While the TV keyboard is open, its own D-pad handling is the only
+        // way to choose letters. Intercepting those keys here made typing on
+        // the library screen feel broken.
+        if (isKeyboardVisible()) return super.dispatchKeyEvent(event);
+
+        if (event.getKeyCode() == KeyEvent.KEYCODE_MENU) {
+            if (event.getAction() == KeyEvent.ACTION_UP && web != null) {
+                web.evaluateJavascript(
+                        "window.__anystreamTvLongSelect && window.__anystreamTvLongSelect()", null);
+            }
+            return true;
+        }
+
         String key = Tv.keyFor(event.getKeyCode());
         if (key == null) return super.dispatchKeyEvent(event);
 
@@ -105,8 +127,22 @@ public class MainActivity extends Activity {
                 if (event.getRepeatCount() == 0) {
                     selectDown = true;
                     selectLongFired = false;
+                    selectLongEligible = false;
                     keyHandler.removeCallbacks(longSelect);
-                    keyHandler.postDelayed(longSelect, 650);
+                    // Only a library card supports the long-press action. On
+                    // a normal button a hold must still act like a normal OK
+                    // press instead of swallowing the click.
+                    if (web != null) {
+                        web.evaluateJavascript(
+                                "window.__anystreamTvCanLongSelect ? window.__anystreamTvCanLongSelect() : false",
+                                new ValueCallback<String>() {
+                                    @Override
+                                    public void onReceiveValue(String value) {
+                                        if (selectDown && "true".equals(value)) selectLongEligible = true;
+                                    }
+                                });
+                    }
+                    keyHandler.postDelayed(longSelect, 1000);
                 }
                 return true;
             }
@@ -114,6 +150,8 @@ public class MainActivity extends Activity {
                 keyHandler.removeCallbacks(longSelect);
                 boolean shortPress = selectDown && !selectLongFired;
                 selectDown = false;
+                selectLongFired = false;
+                selectLongEligible = false;
                 if (shortPress) sendTvKey("select");
                 return true;
             }
@@ -124,7 +162,17 @@ public class MainActivity extends Activity {
             // A direction press interrupts a pending long-select gesture.
             keyHandler.removeCallbacks(longSelect);
             selectDown = false;
-            sendTvKey(key);
+            selectLongFired = false;
+            selectLongEligible = false;
+            long now = SystemClock.uptimeMillis();
+            boolean repeat = event.getRepeatCount() > 0;
+            // Held remotes can generate dozens of events per second. Keep
+            // repeats, but at a speed where one press is one visible move.
+            if (!repeat || event.getKeyCode() != lastDirectionCode || now - lastDirectionAt >= 85) {
+                sendTvKey(key);
+                lastDirectionAt = now;
+                lastDirectionCode = event.getKeyCode();
+            }
         }
         return true;
     }
@@ -139,6 +187,12 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         if (web == null) {
             super.onBackPressed();
+            return;
+        }
+        if (isKeyboardVisible()) {
+            InputMethodManager input =
+                    (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (input != null) input.hideSoftInputFromWindow(web.getWindowToken(), 0);
             return;
         }
         // Settings and the add/edit dialogs are DOM overlays, not WebView
@@ -156,6 +210,25 @@ public class MainActivity extends Activity {
                 });
     }
 
+    private boolean isKeyboardVisible() {
+        if (web == null) return false;
+        try {
+            // isAcceptingText() remains true after the TV IME is dismissed.
+            // Use the actual IME window inset instead so Back and the D-pad
+            // return to the page as soon as the keyboard goes away.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                WindowInsets insets = web.getRootWindowInsets();
+                if (insets != null && insets.isVisible(WindowInsets.Type.ime())) return true;
+            }
+            Rect visible = new Rect();
+            web.getWindowVisibleDisplayFrame(visible);
+            int screenHeight = web.getRootView().getHeight();
+            return screenHeight > 0 && screenHeight - visible.bottom > screenHeight * 0.15;
+        } catch (Throwable err) {
+            return false;
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -171,6 +244,7 @@ public class MainActivity extends Activity {
         keyHandler.removeCallbacks(longSelect);
         selectDown = false;
         selectLongFired = false;
+        selectLongEligible = false;
         try {
             CookieManager.getInstance().flush();
         } catch (Throwable ignored) {
