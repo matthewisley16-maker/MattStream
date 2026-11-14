@@ -7,7 +7,8 @@
   "scripts": {
     "start": "electron .",
     "server": "node server/index.js",
-    "dev": "node server/index.js --open"
+    "dev": "node server/index.js --open",
+    "installer": "electron-builder --win nsis --publish never"
   },
   "engines": {
     "node": ">=18"
@@ -15,5 +16,43 @@
   "devDependencies": {
     "electron": "^45.3.2"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "build": {
+    "appId": "com.mattstream.app",
+    "productName": "MattStream",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "web/**/*",
+      "bin/**/*",
+      "package.json",
+      "icon.ico",
+      "README.md",
+      "start.bat",
+      "start.sh"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MattStream",
+      "artifactName": "MattStream-Windows-Setup.${ext}"
+    }
+  }
 }

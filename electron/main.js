@@ -128,6 +128,12 @@ async function boot() {
   Menu.setApplicationMenu(null);
   registerPickerHandlers();
 
+  // Installed copies live in Program Files, so the library, the index and the
+  // generated artwork go to the user's own AppData folder instead.
+  if (app.isPackaged) {
+    process.env.MATTSTREAM_DATA = path.join(app.getPath('userData'), 'data');
+  }
+
   const already = await probeServer(DEFAULT_PORT);
   if (already) {
     serverPort = already;

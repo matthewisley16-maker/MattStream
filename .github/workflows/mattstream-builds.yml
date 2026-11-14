@@ -106,10 +106,17 @@ jobs:
       - name: Package portable app
         run: node scripts/package-windows.mjs
 
+      - name: Build Windows installer (.exe)
+        run: npx --yes electron-builder@25 --win nsis --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
       - uses: actions/upload-artifact@v4
         with:
           name: mattstream-windows
-          path: dist/MattStream-Windows-x64.zip
+          path: |
+            dist/MattStream-Windows-x64.zip
+            release/*.exe
 
   publish:
     name: Publish downloads
@@ -130,6 +137,7 @@ jobs:
 
             - **MattStream-phone-release.apk** - Android phone or tablet
             - **MattStream-tv-release.apk** - Android TV, Fire TV, Google TV
+            - **MattStream-Windows-Setup.exe** - Windows installer, double-click to install
             - **MattStream-Windows-x64.zip** - portable Windows app, unzip and run MattStream.exe
 
             On first launch the Android app asks for the address MattStream shows in its desktop app.
@@ -137,4 +145,5 @@ jobs:
           files: |
             downloads/**/*.apk
             downloads/**/*.zip
+            downloads/**/*.exe
           fail_on_unmatched_files: false

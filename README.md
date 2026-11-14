@@ -19,7 +19,8 @@ release page (`Releases` on GitHub):
 
 | File | What it is |
 | --- | --- |
-| `MattStream-Windows-x64.zip` | The desktop app. Unzip anywhere and run `MattStream.exe` - no installer, keeps its data in `resources\app\data`. |
+| `MattStream-Windows-Setup.exe` | The Windows installer. Double-click, it installs for your user and adds shortcuts. Library data lives in `%APPDATA%\MattStream`. |
+| `MattStream-Windows-x64.zip` | The portable desktop app. Unzip anywhere and run `MattStream.exe` - no installer, keeps its data in `resources\app\data`. |
 | `MattStream-phone-release.apk` | Android phone or tablet app. |
 | `MattStream-tv-release.apk` | Android TV, Fire TV and Google TV app. |
 
