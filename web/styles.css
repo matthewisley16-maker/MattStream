@@ -1280,3 +1280,45 @@ body.is-tv .card-play { opacity: 1; transform: none; }
   padding: 0 8px;
   letter-spacing: 0.01em;
 }
+
+/* ---------- remote control while casting ---------- */
+
+.cast-remote {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding: 40px;
+  background: rgba(8, 8, 12, 0.94);
+  backdrop-filter: blur(14px);
+}
+.cast-remote-art {
+  width: 200px;
+  aspect-ratio: 2 / 3;
+  border-radius: 14px;
+  background-size: cover;
+  background-position: center;
+  background-color: #14141c;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.5);
+}
+.cast-remote-body { max-width: 520px; display: flex; flex-direction: column; gap: 12px; }
+.cast-remote-eyebrow { text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; color: #7fe0a8; }
+.cast-remote-body h2 { font-size: 26px; margin: 0; }
+.cast-remote-seek { width: 100%; }
+.cast-remote-time { font-variant-numeric: tabular-nums; font-size: 12px; color: #9aa2b1; }
+.cast-remote-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.cast-address-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.cast-address { font-size: 12px; padding: 4px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); }

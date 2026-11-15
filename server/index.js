@@ -59,6 +59,8 @@ const FFMPEG = resolveFfmpeg(APP_ROOT);
 
 // Screens keeping a cast channel open, keyed by their client id.
 const castClients = new Map();
+// What each casting screen is playing, so the casting device can drive it.
+const castSessions = new Map();
 
 const state = {
   scanning: false,
@@ -152,6 +154,29 @@ function log(message) {
 function reindex() {
   byId = new Map();
   for (const item of libraryStore.read().items || []) byId.set(item.id, item);
+}
+
+// The quick tunnel's address is printed by cloudflared; the server reads it
+// straight from the log so the app can always show a reachable address.
+function tunnelUrl() {
+  try {
+    const saved = path.join(APP_ROOT, '.tools', 'public-url.txt');
+    if (fs.existsSync(saved)) {
+      const value = fs.readFileSync(saved, 'utf8').trim();
+      if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(value)) return value;
+    }
+  } catch (err) {
+    /* fall through to the log */
+  }
+  try {
+    const logPath = path.join(APP_ROOT, '.tools', 'tunnel.log');
+    if (!fs.existsSync(logPath)) return '';
+    const content = fs.readFileSync(logPath, 'utf8');
+    const matches = content.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/gi);
+    return matches && matches.length ? matches[matches.length - 1] : '';
+  } catch (err) {
+    return '';
+  }
 }
 
 function lanUrls(port) {
@@ -1139,12 +1164,82 @@ async function handleApi(req, res, url) {
     const drop = () => {
       clearInterval(ping);
       const current = castClients.get(clientId);
-      if (current && current.res === res) castClients.delete(clientId);
+      if (current && current.res === res) {
+        castClients.delete(clientId);
+        castSessions.delete(clientId);
+      }
     };
     req.on('close', drop);
     req.on('error', drop);
     res.on('close', drop);
     return;
+  }
+
+  // Remote control while a cast is running.
+  if (route === '/api/cast/command' && req.method === 'POST') {
+    if (!requireAdmin(res, req)) return;
+    const body = await readBody(req);
+    const targetId = String(body.target || '');
+    const action = String(body.action || '');
+    const value = Number(body.value);
+    if (!['play', 'pause', 'seek', 'speed', 'stop'].includes(action)) {
+      return sendJson(res, 400, { error: 'Unknown command' });
+    }
+    const target = castClients.get(targetId);
+    if (!target) return sendJson(res, 404, { error: 'That screen is not connected any more.' });
+
+    const command = { type: 'command', action };
+    if (Number.isFinite(value)) command.value = value;
+    try {
+      target.res.write('data: ' + JSON.stringify(command) + '\n\n');
+    } catch (err) {
+      return sendJson(res, 409, { error: 'That screen dropped off.' });
+    }
+
+    const session = castSessions.get(targetId);
+    if (session) {
+      if (action === 'play') session.paused = false;
+      if (action === 'pause') session.paused = true;
+      if (action === 'seek') session.position = value;
+      if (action === 'speed') session.speed = value;
+      session.updatedAt = Date.now();
+    }
+    if (action === 'stop') castSessions.delete(targetId);
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // The screen playing the film reports where it is, every couple of seconds.
+  if (route === '/api/cast/report' && req.method === 'POST') {
+    const body = await readBody(req);
+    const targetId = String(body.target || '');
+    if (!castClients.has(targetId)) return sendJson(res, 404, { error: 'Unknown screen' });
+    if (!castSessions.has(targetId)) return sendJson(res, 409, { error: 'No cast running' });
+    castSessions.set(targetId, {
+      targetId,
+      itemId: String(body.itemId || ''),
+      paused: Boolean(body.paused),
+      position: Number(body.position) || 0,
+      duration: Number(body.duration) || 0,
+      speed: Number(body.speed) || 1,
+      updatedAt: Date.now(),
+    });
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (route === '/api/cast/state') {
+    const targetId = String(url.searchParams.get('target') || '');
+    const session = castSessions.get(targetId) || null;
+    return sendJson(res, 200, { session, connected: castClients.has(targetId) });
+  }
+
+  if (route === '/api/network') {
+    // Addresses a TV or phone can be pointed at. The tunnel is read from the
+    // log because the URL is only known once cloudflared has registered.
+    return sendJson(res, 200, {
+      port: currentPort,
+      lan: lanUrls(currentPort),
+      tunnel: tunnelUrl(),
+    });
   }
 
   if (route === '/api/cast/targets') {
@@ -1177,6 +1272,15 @@ async function handleApi(req, res, url) {
       castClients.delete(target.id);
       return sendJson(res, 409, { error: 'That screen dropped off - try Refresh.' });
     }
+    castSessions.set(target.id, {
+      targetId: target.id,
+      itemId: item.id,
+      paused: false,
+      position: 0,
+      duration: Number(item.duration) || 0,
+      speed: 1,
+      updatedAt: Date.now(),
+    });
     log('casting "' + item.title + '" to ' + target.name);
     return sendJson(res, 200, { ok: true, target: target.name });
   }

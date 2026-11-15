@@ -6,6 +6,25 @@ release page; the version number only moves when the app changes in a way worth 
 
 This file covers **MattStream only**. Nothing about AnyStreamSite belongs in this repository.
 
+## 2026-11-15
+
+### Added
+
+- **Controls carry on while casting** - sending a film to the TV no longer hands over all the buttons.
+  A panel on the casting device shows what the other screen is playing, its real position, and
+  Play/Pause, -10s, +10s, seek, speed and *Stop casting*; every press acts on that screen and the
+  time line follows it, because the screen playing reports back every couple of seconds.
+
+- **Always choose the server** - the Android and Android TV apps now open on a picker that lists every
+  address this device has used, newest first, with the entry box below for a new one. Nothing is
+  re-opened silently from a saved IP that a router may have since reassigned, and the TV remote's Menu
+  key brings the picker back at any time.
+
+- **The cast dialog shows where the TV should look** - it lists the address to type into the TV app
+  (the live tunnel address, or your network address when there is no tunnel) with a Copy button, so a
+  screen that has never connected is one paste away. The server reports both through `/api/network`
+  and reads the tunnel address straight from the tunnel log, so it is never stale.
+
 ## 2026-11-14
 
 ### Added

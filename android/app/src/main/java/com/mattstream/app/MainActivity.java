@@ -33,7 +33,9 @@ public class MainActivity extends Activity {
 
     private static final String PREFS = "mattstream";
     private static final String KEY_SERVER = "server";
+    private static final String KEY_SERVERS = "servers";
     private static final int DEFAULT_PORT = 8096;
+    private static final int MAX_SERVERS = 8;
 
     // The library this build opens with. Anyone else can type their own address
     // on this screen, and it is remembered from then on.
@@ -57,11 +59,41 @@ public class MainActivity extends Activity {
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         serverUrl = prefs.getString(KEY_SERVER, "");
-        if (serverUrl == null || serverUrl.isEmpty()) {
-            showSetup("Your home library is filled in below. Tap Connect while this device is on the same Wi-Fi.");
-        } else {
-            loadServer(serverUrl);
+        if (serverUrl == null) serverUrl = "";
+        // Always start on the picker: a saved address may be an old IP that a
+        // router has since handed to something else, and there is more than one
+        // server worth reaching. Picking takes one click.
+        showSetup("Choose the server to open.");
+    }
+
+    /* ---------------- saved servers ---------------- */
+
+    private java.util.List<String> savedServers() {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        String raw = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SERVERS, "");
+        if (raw == null) return list;
+        for (String line : raw.split("\n")) {
+            String value = line.trim();
+            if (!value.isEmpty() && !list.contains(value)) list.add(value);
         }
+        return list;
+    }
+
+    private void rememberServer(String url) {
+        java.util.List<String> list = savedServers();
+        list.remove(url);
+        list.add(0, url);
+        while (list.size() > MAX_SERVERS) list.remove(list.size() - 1);
+        StringBuilder raw = new StringBuilder();
+        for (String entry : list) {
+            if (raw.length() > 0) raw.append('\n');
+            raw.append(entry);
+        }
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+                .edit()
+                .putString(KEY_SERVERS, raw.toString())
+                .putString(KEY_SERVER, url)
+                .apply();
     }
 
     private int dp(float value) {
@@ -77,6 +109,7 @@ public class MainActivity extends Activity {
             root.removeView(setupView);
             setupView = null;
         }
+        final java.util.List<String> known = savedServers();
 
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
@@ -94,8 +127,43 @@ public class MainActivity extends Activity {
         hint.setText(message);
         hint.setTextColor(Color.parseColor("#B9BCC8"));
         hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        hint.setPadding(0, dp(10), 0, dp(22));
+        hint.setPadding(0, dp(10), 0, dp(12));
         column.addView(hint);
+
+        // Every server this device has used, newest first, always listed.
+        for (String address : known) {
+            Button saved = new Button(this);
+            String label = address.equals(serverUrl) ? address + "  (last used)" : address;
+            saved.setText(label);
+            saved.setAllCaps(false);
+            saved.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+            saved.setGravity(Gravity.CENTER_VERTICAL);
+            saved.setPadding(dp(18), dp(4), dp(18), dp(4));
+            saved.setBackgroundColor(Color.parseColor("#15161E"));
+            saved.setTextColor(Color.WHITE);
+            final String pick = address;
+            saved.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    serverUrl = pick;
+                    rememberServer(pick);
+                    loadServer(pick);
+                }
+            });
+            LinearLayout.LayoutParams savedParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            savedParams.bottomMargin = dp(6);
+            column.addView(saved, savedParams);
+        }
+
+        if (!known.isEmpty()) {
+            TextView addTitle = new TextView(this);
+            addTitle.setText("Add another server");
+            addTitle.setTextColor(Color.parseColor("#B9BCC8"));
+            addTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            addTitle.setPadding(0, dp(14), 0, dp(6));
+            column.addView(addTitle);
+        }
 
         final EditText input = new EditText(this);
         input.setHint("192.168.1.24:8096");
@@ -105,7 +173,8 @@ public class MainActivity extends Activity {
         input.setHintTextColor(Color.parseColor("#6E7280"));
         input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         input.setImeOptions(EditorInfo.IME_ACTION_GO);
-        if (serverUrl != null && !serverUrl.isEmpty()) input.setText(serverUrl);
+        if (!serverUrl.isEmpty()) input.setText(serverUrl);
+        else if (!known.isEmpty()) input.setText("");
         else input.setText(DEFAULT_SERVER);
         column.addView(input, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -124,7 +193,7 @@ public class MainActivity extends Activity {
                 String value = normalize(input.getText().toString());
                 if (value.isEmpty()) return;
                 serverUrl = value;
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SERVER, value).apply();
+                rememberServer(value);
                 loadServer(value);
             }
         };
@@ -258,6 +327,17 @@ public class MainActivity extends Activity {
         } else {
             decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         }
+    }
+
+    /** Menu (or Settings) on a TV remote opens the server picker from anywhere. */
+    @Override
+    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        if (web != null && (keyCode == android.view.KeyEvent.KEYCODE_MENU
+                || keyCode == android.view.KeyEvent.KEYCODE_SETTINGS)) {
+            showSetup("Choose the server to open.");
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
     }
 
     @Override
