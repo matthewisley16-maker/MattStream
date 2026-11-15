@@ -363,7 +363,7 @@ select.control:focus { outline: none; border-color: rgba(255, 61, 113, 0.5); }
 .dialog-layer {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 90;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -1248,7 +1248,7 @@ body.is-tv .card-play { opacity: 1; transform: none; }
   left: 50%;
   bottom: 24px;
   transform: translateX(-50%);
-  z-index: 60;
+  z-index: 85;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -1286,7 +1286,7 @@ body.is-tv .card-play { opacity: 1; transform: none; }
 .cast-remote {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 95;
   display: flex;
   align-items: center;
   justify-content: center;

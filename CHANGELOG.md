@@ -10,6 +10,10 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Fixed
 
+- **The Cast button in the player works** - it opened the screen list *underneath* the full-screen player, so
+  pressing it looked like nothing happened. The screen list now sits above the player, and the "Casting from"
+  banner and the remote panel sit above it too while a film is playing.
+
 - **The TV shows up under its own name** - the Android and Android TV apps now pass the device's model
   (for example the TV's real model string) to the server, so the cast list names the screen you are
   sending to instead of calling every Android device a phone.
