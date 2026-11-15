@@ -3,6 +3,7 @@ package com.mattstream.app;
 import android.app.Activity;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
@@ -298,7 +299,13 @@ public class MainActivity extends Activity {
         web = view;
         root.addView(view, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        view.loadUrl(target + "/");
+        // Tell the server which device this is, so the cast list on the desktop
+        // shows the TV's own name instead of a generic "Phone".
+        String deviceName = Build.MODEL == null ? "" : Build.MODEL.trim();
+        if (deviceName.isEmpty()) deviceName = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.trim();
+        String open = target + "/";
+        if (!deviceName.isEmpty()) open += "?name=" + Uri.encode(deviceName);
+        view.loadUrl(open);
         view.requestFocus();
     }
 

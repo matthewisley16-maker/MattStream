@@ -361,7 +361,9 @@ async function openCastMenu(item) {
       el(
         'div',
         'browser-empty',
-        'No other screens are connected right now. Open MattStream on the TV and press Refresh.'
+        'No other screens are connected right now. A TV only shows up here while the MattStream TV app ' +
+          'is open on it and pointed at the address below. If it still will not connect, Windows Firewall ' +
+          'is blocking connections to this PC - allow MattStream through it once.'
       )
     );
   } else {

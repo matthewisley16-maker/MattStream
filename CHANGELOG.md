@@ -8,6 +8,12 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ## 2026-11-15
 
+### Fixed
+
+- **The TV shows up under its own name** - the Android and Android TV apps now pass the device's model
+  (for example the TV's real model string) to the server, so the cast list names the screen you are
+  sending to instead of calling every Android device a phone.
+
 ### Added
 
 - **Controls carry on while casting** - sending a film to the TV no longer hands over all the buttons.
