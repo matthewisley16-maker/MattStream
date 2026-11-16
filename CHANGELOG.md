@@ -16,6 +16,12 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
   from this server with no app on the TV, no account and no cloud round trip. Play/Pause and Stop come back through the
   same remote panel; seeking and speed are hidden for a TV because a live transcode cannot honour them.
 
+### Added
+
+- **Border on or off for the cast controls** - the panel that appears while a TV or another screen plays now has a
+  *Border on / Border off* button. Border on draws an edge around the poster and the controls; Border off removes it and
+  runs the panel edge to edge on black. The choice is remembered for the next cast.
+
 ### Fixed
 
 - **Play closes the details sheet** - pressing Play or Resume used to start the film with its details sheet left open on

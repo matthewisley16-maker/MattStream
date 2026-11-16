@@ -230,6 +230,34 @@ async function refreshCastRemote() {
 
 let castRemoteTv = false;
 
+// The casting panel can be shown with its border, or edge to edge with none.
+// The choice is remembered, since it is a preference rather than a one-off.
+const CAST_FRAME_KEY = 'mattstream-cast-frame';
+
+function castFrameOn() {
+  try {
+    return localStorage.getItem(CAST_FRAME_KEY) !== 'none';
+  } catch (err) {
+    return true;
+  }
+}
+
+function setCastFrame(on) {
+  try {
+    localStorage.setItem(CAST_FRAME_KEY, on ? 'border' : 'none');
+  } catch (err) {
+    /* private mode: the choice just will not persist */
+  }
+  applyCastFrame();
+}
+
+function applyCastFrame() {
+  if (!castRemote) return;
+  castRemote.classList.toggle('no-frame', !castFrameOn());
+  const button = castRemote.querySelector('.cast-remote-frame');
+  if (button) button.textContent = castFrameOn() ? 'Border on' : 'Border off';
+}
+
 function showCastRemote(target, item, options) {
   const tv = Boolean(options && options.tv);
   castRemoteTv = tv;
@@ -243,6 +271,7 @@ function showCastRemote(target, item, options) {
 
   const panel = el('div', 'cast-remote');
   const art = el('div', 'cast-remote-art');
+  art.classList.toggle('no-border', !castFrameOn());
   art.style.backgroundImage = 'url("/api/art/' + encodeURIComponent(item.id) + '")';
   panel.appendChild(art);
 
@@ -327,6 +356,17 @@ function showCastRemote(target, item, options) {
   });
   buttons.appendChild(speed);
 
+  const frame = el('button', 'btn is-ghost cast-remote-frame', castFrameOn() ? 'Border on' : 'Border off');
+  frame.type = 'button';
+  frame.title = 'Show or hide the border around these cast controls';
+  frame.addEventListener('click', () => {
+    setCastFrame(!castFrameOn());
+    const art = castRemote && castRemote.querySelector('.cast-remote-art');
+    if (art) art.classList.toggle('no-border', !castFrameOn());
+    toast(castFrameOn() ? 'Border on' : 'No border');
+  });
+  buttons.appendChild(frame);
+
   const stop = el('button', 'btn is-ghost', 'Stop casting');
   stop.type = 'button';
   stop.addEventListener('click', async () => {
@@ -339,6 +379,7 @@ function showCastRemote(target, item, options) {
   panel.appendChild(body);
   document.body.appendChild(panel);
   castRemote = panel;
+  applyCastFrame();
   renderCastRemote();
   refreshCastRemote();
   castRemoteTimer = setInterval(refreshCastRemote, 1500);

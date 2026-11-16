@@ -1332,3 +1332,20 @@ body.is-tv .card-play { opacity: 1; transform: none; }
   text-transform: uppercase;
   color: var(--muted-dim);
 }
+
+/* Border on: a drawn edge around the poster and the panel. Border off: the
+   same panel with no frame at all, edge to edge. */
+.cast-remote .cast-remote-art { border: 1px solid rgba(255, 255, 255, 0.12); }
+.cast-remote .cast-remote-body {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+.cast-remote-art.no-border { border: none !important; border-radius: 0; box-shadow: none; }
+.cast-remote.no-frame .cast-remote-body {
+  border: none;
+  border-radius: 0;
+  padding: 18px 20px 18px 0;
+}
+.cast-remote.no-frame { padding: 0; background: #000; backdrop-filter: none; }
+.cast-remote.no-frame .cast-remote-art { margin: 0; }
