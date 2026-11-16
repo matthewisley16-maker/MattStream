@@ -18,6 +18,10 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Fixed
 
+- **Play closes the details sheet** - pressing Play or Resume used to start the film with its details sheet left open on
+  top of it (the sheet stacks above the player so casting can be chosen there). Starting playback now closes the sheet
+  first, so the film is what you see.
+
 - **Sound when casting to a TV** - the set could not decode the film's E-AC3 track, so it played silent video. The cast now
   copies the video untouched and converts only the audio to AAC stereo into a cached MP4 (verified: HEVC 1080p + AAC LC
   192 kb/s, 1:11:37), so quality and duration are unchanged and the sound plays. The app never touches the TV's volume;

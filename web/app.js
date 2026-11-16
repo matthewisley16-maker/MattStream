@@ -1991,6 +1991,10 @@ function toggleFullscreen() {
 
 function openPlayer(item, startAt) {
   if (!item) return;
+  // Playing from the details sheet has to put the sheet away, or the film runs
+  // behind it (the sheet stacks above the player so casting can be picked).
+  const sheet = $('#dialogLayer');
+  if (sheet && !sheet.hidden && typeof closeDialog === 'function') closeDialog();
   if (player.item) closePlayer();
 
   const resume = progressFor(item);
