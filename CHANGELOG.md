@@ -6,6 +6,15 @@ release page; the version number only moves when the app changes in a way worth 
 
 This file covers **MattStream only**. Nothing about AnyStreamSite belongs in this repository.
 
+## 2026-11-16
+
+### Changed
+
+- **The Android apps open already connected** - a fresh install goes straight into the library at the
+  build's own server address instead of stopping on a picker, and an upgraded install retries that address
+  once if its saved one no longer answers (routers hand out new IPs). The picker is still there for another
+  server: Menu on a TV remote, or by itself when nothing answers. Version 1.1.1.
+
 ## 2026-11-15
 
 ### Fixed

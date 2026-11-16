@@ -38,9 +38,10 @@ public class MainActivity extends Activity {
     private static final int DEFAULT_PORT = 8096;
     private static final int MAX_SERVERS = 8;
 
-    // The library this build opens with. Anyone else can type their own address
-    // on this screen, and it is remembered from then on.
-    private static final String DEFAULT_SERVER = "http://192.168.25.146:8096";
+    // The library this build opens with, so a fresh install is already
+    // connected. Anyone else can type their own address on the picker (Menu on
+    // a TV remote, or automatically when this one cannot be reached).
+    private static final String DEFAULT_SERVER = "http://192.168.80.124:8096";
 
     private FrameLayout root;
     private TvWebView web;
@@ -61,10 +62,13 @@ public class MainActivity extends Activity {
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         serverUrl = prefs.getString(KEY_SERVER, "");
         if (serverUrl == null) serverUrl = "";
-        // Always start on the picker: a saved address may be an old IP that a
-        // router has since handed to something else, and there is more than one
-        // server worth reaching. Picking takes one click.
-        showSetup("Choose the server to open.");
+        // Open straight into the library. The picker is still one key away, and
+        // appears by itself when this address stops answering.
+        if (serverUrl.isEmpty()) {
+            serverUrl = DEFAULT_SERVER;
+            rememberServer(serverUrl);
+        }
+        loadServer(serverUrl);
     }
 
     /* ---------------- saved servers ---------------- */
@@ -270,6 +274,16 @@ public class MainActivity extends Activity {
             public void onReceivedError(WebView v, int code, String description, String failingUrl) {
                 if (failingUrl == null) return;
                 if (!failingUrl.startsWith(target)) return;
+                // A saved address can be an IP the router has since handed to
+                // something else. Try the address this build ships with once
+                // before asking the viewer to type anything.
+                String fallback = normalize(DEFAULT_SERVER);
+                if (!target.equals(fallback)) {
+                    serverUrl = fallback;
+                    rememberServer(fallback);
+                    loadServer(fallback);
+                    return;
+                }
                 showSetup("Could not reach " + target + ".\n\nStart MattStream on the desktop, make sure both "
                         + "devices are on the same Wi-Fi, and allow it through Windows Firewall.");
             }
