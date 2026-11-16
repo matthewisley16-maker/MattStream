@@ -206,7 +206,8 @@ async function refreshCastRemote() {
   }
 }
 
-function showCastRemote(target, item) {
+function showCastRemote(target, item, options) {
+  const tv = Boolean(options && options.tv);
   closeCastRemote();
   // The point of casting is that the other screen plays it, so stop here.
   if (typeof player !== 'undefined' && player.item && typeof closePlayer === 'function') closePlayer();
@@ -224,6 +225,8 @@ function showCastRemote(target, item) {
   body.appendChild(el('span', 'cast-remote-eyebrow', 'Playing on ' + target.name));
   body.appendChild(el('h2', null, item.title));
 
+  // A TV plays a live transcode; its player cannot jump around in it, so the
+  // seek bar and the skip buttons would be dead weight there.
   const seek = document.createElement('input');
   seek.type = 'range';
   seek.className = 'cast-remote-seek';
@@ -248,7 +251,7 @@ function showCastRemote(target, item) {
     renderCastRemote();
     await sendCastCommand('seek', position);
   });
-  body.appendChild(seek);
+  if (!tv) body.appendChild(seek);
   body.appendChild(el('div', 'cast-remote-time', '0:00 / ' + formatClock(castRemoteState.duration)));
 
   const buttons = el('div', 'cast-remote-buttons');
@@ -261,7 +264,7 @@ function showCastRemote(target, item) {
     renderCastRemote();
     await sendCastCommand('seek', goal);
   });
-  buttons.appendChild(back);
+  if (!tv) buttons.appendChild(back);
 
   const play = el('button', 'btn is-primary cast-remote-play', 'Pause');
   play.type = 'button';
@@ -281,7 +284,7 @@ function showCastRemote(target, item) {
     renderCastRemote();
     await sendCastCommand('seek', goal);
   });
-  buttons.appendChild(fwd);
+  if (!tv) buttons.appendChild(fwd);
 
   const speed = el('button', 'btn is-ghost cast-remote-speed', '1×');
   speed.type = 'button';
@@ -344,8 +347,20 @@ async function castAddress() {
   return location.origin;
 }
 
+async function castTvDevices() {
+  try {
+    const res = await fetch('/api/cast/devices', { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.devices || [];
+  } catch (err) {
+    return [];
+  }
+}
+
 async function openCastMenu(item) {
   const targets = await castTargets();
+  const tvs = await castTvDevices();
   const address = await castAddress();
   const dialog = dialogShell(true);
   const body = el('div', 'dialog-body');
@@ -354,19 +369,19 @@ async function openCastMenu(item) {
     el(
       'p',
       'hint',
-      'The other screen opens the player and streams this video from this server - no copy is made. ' +
-        'While it plays, these controls keep working on it.'
+      'Any screen here streams this video from this server - no copy is made, and the controls keep ' +
+        'working on it. TVs on the network play through their own Chromecast, so they need nothing installed.'
     )
   );
 
-  if (!targets.length) {
+  if (!targets.length && !tvs.length) {
     body.appendChild(
       el(
         'div',
         'browser-empty',
-        'No other screens are connected right now. A TV only shows up here while the MattStream TV app ' +
-          'is open on it and pointed at the address below. If it still will not connect, check that Windows ' +
-          'Firewall allows MattStream on TCP port 8096.'
+        'No screens answered. A TV with the MattStream app must have it open and pointed at the address ' +
+          'below; a Chromecast TV must be switched on and on the same network. If nothing works, check that ' +
+          'Windows Firewall allows MattStream on TCP port 8096.'
       )
     );
   } else {
@@ -411,6 +426,44 @@ async function openCastMenu(item) {
       list.appendChild(row);
     }
     body.appendChild(list);
+  }
+
+  if (tvs.length) {
+    body.appendChild(el('h3', 'cast-section', 'TVs on your network'));
+    const tvList = el('div', 'cast-list');
+    for (const tv of tvs) {
+      const row = el('div', 'cast-row');
+      const info = el('div', 'cast-info');
+      info.appendChild(el('strong', null, tv.name));
+      info.appendChild(el('span', 'hint', tv.model + ' - no app needed'));
+      row.appendChild(info);
+
+      const play = el('button', 'btn is-primary', 'Play on TV');
+      play.type = 'button';
+      play.addEventListener('click', async () => {
+        play.disabled = true;
+        play.textContent = 'Starting...';
+        try {
+          const res = await fetch('/api/cast/tv', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ deviceId: tv.id, itemId: item.id }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Could not cast to that TV');
+          closeDialog();
+          toast('Playing on ' + (data.target || tv.name));
+          showCastRemote({ id: tv.id, name: tv.name }, item, { tv: true });
+        } catch (err) {
+          toast(err.message, true);
+          play.disabled = false;
+          play.textContent = 'Play on TV';
+        }
+      });
+      row.appendChild(play);
+      tvList.appendChild(row);
+    }
+    body.appendChild(tvList);
   }
 
   if (castNetwork && castNetwork.firewall === false) {

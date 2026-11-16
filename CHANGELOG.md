@@ -8,6 +8,14 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ## 2026-11-16
 
+### Added
+
+- **Cast to a TV without installing anything** - the cast dialog now finds the Chromecast built into Google TV / Android
+  TV sets on the network (mDNS discovery) and lists them by their real names, as in *Family Room TV - BRAVIA 4K GB ATV3*.
+  *Play on TV* starts the set's built-in Default Media Receiver through the Google Cast protocol and streams that film
+  from this server with no app on the TV, no account and no cloud round trip. Play/Pause and Stop come back through the
+  same remote panel; seeking and speed are hidden for a TV because a live transcode cannot honour them.
+
 ### Fixed
 
 - **The app no longer guesses about the firewall** - the cast dialog used to tell you Windows Firewall was blocking

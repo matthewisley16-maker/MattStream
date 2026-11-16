@@ -13,8 +13,22 @@ const { Store } = require('./store');
 const { resolveFfmpeg, ffmpegWorks, buildPlayArgs } = require('./media');
 const { scanLibrary, sortTitle, VIDEO_EXT, prettySize } = require('./scan');
 const tmdb = require('./tmdb');
+const { makeCastTv } = require('./cast-tv');
 
 const APP_ROOT = path.resolve(__dirname, '..');
+
+let castTv = null;
+
+function castTvs() {
+  if (!castTv) {
+    castTv = makeCastTv({
+      lanBase: () =>
+        (lanUrls(currentPort)[0] || 'http://127.0.0.1:' + currentPort).replace(/\/$/, ''),
+      log,
+    });
+  }
+  return castTv;
+}
 const DATA_DIR = process.env.MATTSTREAM_DATA
   ? path.resolve(process.env.MATTSTREAM_DATA)
   : path.join(APP_ROOT, 'data');
@@ -1209,7 +1223,12 @@ async function handleApi(req, res, url) {
       return sendJson(res, 400, { error: 'Unknown command' });
     }
     const target = castClients.get(targetId);
-    if (!target) return sendJson(res, 404, { error: 'That screen is not connected any more.' });
+    if (!target) {
+      // A TV playing through its built-in Chromecast has no page open here.
+      const handled = await castTvs().command(targetId, action, value);
+      if (handled) return sendJson(res, 200, { ok: true });
+      return sendJson(res, 404, { error: 'That screen is not connected any more.' });
+    }
 
     const command = { type: 'command', action };
     if (Number.isFinite(value)) command.value = value;
@@ -1252,6 +1271,10 @@ async function handleApi(req, res, url) {
   if (route === '/api/cast/state') {
     const targetId = String(url.searchParams.get('target') || '');
     const session = castSessions.get(targetId) || null;
+    if (!session) {
+      const tv = await castTvs().state(targetId);
+      if (tv) return sendJson(res, 200, { session: tv, connected: true });
+    }
     return sendJson(res, 200, { session, connected: castClients.has(targetId) });
   }
 
@@ -1264,6 +1287,30 @@ async function handleApi(req, res, url) {
       tunnel: tunnelUrl(),
       firewall: firewallAllows(),
     });
+  }
+
+  // TVs on the network that can play without the MattStream app.
+  if (route === '/api/cast/devices') {
+    if (!requireAdmin(res, req)) return;
+    try {
+      const found = await castTvs().listDevices(url.searchParams.get('refresh') === '1');
+      return sendJson(res, 200, { devices: found });
+    } catch (err) {
+      return sendJson(res, 200, { devices: [], error: err.message });
+    }
+  }
+
+  if (route === '/api/cast/tv' && req.method === 'POST') {
+    if (!requireAdmin(res, req)) return;
+    const body = await readBody(req);
+    const item = byId.get(String(body.itemId || ''));
+    if (!item) return sendJson(res, 404, { error: 'Unknown video' });
+    try {
+      const result = await castTvs().cast(String(body.deviceId || ''), item);
+      return sendJson(res, 200, { ok: true, target: result.device.name });
+    } catch (err) {
+      return sendJson(res, 502, { error: err.message });
+    }
   }
 
   if (route === '/api/cast/targets') {
