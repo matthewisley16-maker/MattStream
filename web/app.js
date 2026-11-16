@@ -2221,6 +2221,10 @@ function openPlayer(item, startAt) {
   video.addEventListener('timeupdate', updateTimeUi);
   video.addEventListener('progress', updateTimeUi);
   video.addEventListener('play', () => {
+    // However playback was started - a film's Play button, an episode row, a
+    // resume card - nothing may be left sitting over the picture.
+    const sheet = $('#dialogLayer');
+    if (sheet && !sheet.hidden && typeof closeDialog === 'function') closeDialog();
     setPlayIcon();
     wakeControls();
   });

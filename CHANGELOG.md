@@ -27,6 +27,8 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 - **Play closes the details sheet** - pressing Play or Resume used to start the film with its details sheet left open on
   top of it (the sheet stacks above the player so casting can be chosen there). Starting playback now closes the sheet
   first, so the film is what you see.
+- **Episodes too** - the same for shows: choosing an episode from a season closes the show sheet. As a backstop,
+  any open sheet is also closed the moment the video actually starts playing, whatever started it.
 
 - **Sound when casting to a TV** - the set could not decode the film's E-AC3 track, so it played silent video. The cast now
   copies the video untouched and converts only the audio to AAC stereo into a cached MP4 (verified: HEVC 1080p + AAC LC
