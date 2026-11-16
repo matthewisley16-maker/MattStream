@@ -18,6 +18,11 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Fixed
 
+- **Sound when casting to a TV** - the set could not decode the film's E-AC3 track, so it played silent video. The cast now
+  copies the video untouched and converts only the audio to AAC stereo into a cached MP4 (verified: HEVC 1080p + AAC LC
+  192 kb/s, 1:11:37), so quality and duration are unchanged and the sound plays. The app never touches the TV's volume;
+  if the set's Cast volume is near zero it says so in the remote panel instead.
+
 - **TV casting now plays the film, not a 12 second live clip** - the set was handed a live MP4 pipe, which has
   no duration, so its own player showed a 12 second stream with nothing to skip. The cast now gives the TV the
   file itself (it decodes the MKV/HEVC/E-AC3 directly), so the TV shows the real 1:11:37 runtime, its own remote

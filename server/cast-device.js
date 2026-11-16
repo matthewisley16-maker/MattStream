@@ -197,6 +197,15 @@ class CastSession {
     return status;
   }
 
+  async setVolume(level) {
+    // Cast keeps its own volume: a receiver left at 0 is silent even though
+    // the media reports sound and the TV's own volume is up.
+    return this.request('receiver-0', NS.receiver, {
+      type: 'SET_VOLUME',
+      volume: { level: Math.max(0, Math.min(1, Number(level))) },
+    });
+  }
+
   async playState() {
     if (!this.transportId) return null;
     const reply = await this.request(

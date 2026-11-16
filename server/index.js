@@ -22,6 +22,7 @@ let castTv = null;
 function castTvs() {
   if (!castTv) {
     castTv = makeCastTv({
+      dataDir: DATA_DIR,
       lanBase: () =>
         (lanUrls(currentPort)[0] || 'http://127.0.0.1:' + currentPort).replace(/\/$/, ''),
       log,
@@ -1311,6 +1312,14 @@ async function handleApi(req, res, url) {
     } catch (err) {
       return sendJson(res, 502, { error: err.message });
     }
+  }
+
+  // The AAC remux the TV plays; it fetches this itself, so no key here.
+  if (route.startsWith('/api/cast/file/')) {
+    const id = decodeURIComponent(route.slice('/api/cast/file/'.length));
+    const full = castTvs().preparedFile(id);
+    if (!full) return sendText(res, 404, 'This video is not prepared for the TV yet');
+    return streamFile(req, res, full, 'video/mp4', 'no-cache');
   }
 
   if (route === '/api/cast/targets') {

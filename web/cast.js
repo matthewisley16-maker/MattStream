@@ -183,6 +183,15 @@ function renderCastRemote() {
     speed.style.display = castRemoteTv ? 'none' : '';
   }
   // A transcode cannot be skipped through, so do not offer what would not work.
+  const sound = castRemoteState.volume;
+  const silent = sound && (sound.muted || Number(sound.level) < 0.1);
+  const volumeNote = castRemote.querySelector('.cast-remote-warn');
+  if (volumeNote) {
+    volumeNote.textContent = silent
+      ? 'The TV volume is ' + Math.round((Number(sound.level) || 0) * 100) + '%' + (sound.muted ? ' and muted' : '') + ' - turn it up on the TV'
+      : '';
+    volumeNote.style.display = silent ? '' : 'none';
+  }
   const canSeek = !castRemoteTv || castRemoteState.seekable !== false;
   if (seek) seek.style.display = canSeek ? '' : 'none';
   const back = castRemote.querySelector('.cast-remote-back');
@@ -210,6 +219,8 @@ async function refreshCastRemote() {
       position: Number(data.session.position) || 0,
       duration: Number(data.session.duration) || 0,
       speed: Number(data.session.speed) || 1,
+      seekable: data.session.seekable,
+      volume: data.session.volume || null,
     };
     renderCastRemote();
   } catch (err) {
@@ -267,6 +278,9 @@ function showCastRemote(target, item, options) {
   });
   body.appendChild(seek);
   body.appendChild(el('div', 'cast-remote-time', '0:00 / ' + formatClock(castRemoteState.duration)));
+  const warn = el('p', 'hint cast-warn cast-remote-warn', '');
+  warn.style.display = 'none';
+  body.appendChild(warn);
 
   const buttons = el('div', 'cast-remote-buttons');
 
