@@ -18,6 +18,12 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Fixed
 
+- **TV casting now plays the film, not a 12 second live clip** - the set was handed a live MP4 pipe, which has
+  no duration, so its own player showed a 12 second stream with nothing to skip. The cast now gives the TV the
+  file itself (it decodes the MKV/HEVC/E-AC3 directly), so the TV shows the real 1:11:37 runtime, its own remote
+  can pause and seek, and the stream is at **source quality** - no downscale. A transcode is used only when the
+  set refuses the file, and the remote panel then hides the seek and speed controls it could not honour.
+
 - **The app no longer guesses about the firewall** - the cast dialog used to tell you Windows Firewall was blocking
   connections even after it had been allowed. The server now reports the rule's real state (read from Windows) and
   warns only when it is genuinely blocked; `/api/network` carries `firewall: true/false`.

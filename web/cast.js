@@ -177,7 +177,18 @@ function renderCastRemote() {
     seek.value = duration ? String(Math.round((castRemoteState.position / duration) * 1000)) : '0';
   }
   if (play) play.textContent = castRemoteState.paused ? 'Play' : 'Pause';
-  if (speed) speed.textContent = (castRemoteState.speed || 1) + '×';
+  if (speed) {
+    speed.textContent = (castRemoteState.speed || 1) + '×';
+    // The Cast protocol has no playback rate for the default player.
+    speed.style.display = castRemoteTv ? 'none' : '';
+  }
+  // A transcode cannot be skipped through, so do not offer what would not work.
+  const canSeek = !castRemoteTv || castRemoteState.seekable !== false;
+  if (seek) seek.style.display = canSeek ? '' : 'none';
+  const back = castRemote.querySelector('.cast-remote-back');
+  const fwd = castRemote.querySelector('.cast-remote-fwd');
+  if (back) back.style.display = canSeek ? '' : 'none';
+  if (fwd) fwd.style.display = canSeek ? '' : 'none';
 }
 
 async function refreshCastRemote() {
@@ -206,8 +217,11 @@ async function refreshCastRemote() {
   }
 }
 
+let castRemoteTv = false;
+
 function showCastRemote(target, item, options) {
   const tv = Boolean(options && options.tv);
+  castRemoteTv = tv;
   closeCastRemote();
   // The point of casting is that the other screen plays it, so stop here.
   if (typeof player !== 'undefined' && player.item && typeof closePlayer === 'function') closePlayer();
@@ -251,12 +265,12 @@ function showCastRemote(target, item, options) {
     renderCastRemote();
     await sendCastCommand('seek', position);
   });
-  if (!tv) body.appendChild(seek);
+  body.appendChild(seek);
   body.appendChild(el('div', 'cast-remote-time', '0:00 / ' + formatClock(castRemoteState.duration)));
 
   const buttons = el('div', 'cast-remote-buttons');
 
-  const back = el('button', 'btn is-ghost', '-10s');
+  const back = el('button', 'btn is-ghost cast-remote-back', '-10s');
   back.type = 'button';
   back.addEventListener('click', async () => {
     const goal = Math.max(0, castRemoteState.position - 10);
@@ -264,7 +278,7 @@ function showCastRemote(target, item, options) {
     renderCastRemote();
     await sendCastCommand('seek', goal);
   });
-  if (!tv) buttons.appendChild(back);
+  buttons.appendChild(back);
 
   const play = el('button', 'btn is-primary cast-remote-play', 'Pause');
   play.type = 'button';
@@ -276,7 +290,7 @@ function showCastRemote(target, item, options) {
   });
   buttons.appendChild(play);
 
-  const fwd = el('button', 'btn is-ghost', '+10s');
+  const fwd = el('button', 'btn is-ghost cast-remote-fwd', '+10s');
   fwd.type = 'button';
   fwd.addEventListener('click', async () => {
     const goal = castRemoteState.position + 10;
@@ -284,7 +298,7 @@ function showCastRemote(target, item, options) {
     renderCastRemote();
     await sendCastCommand('seek', goal);
   });
-  if (!tv) buttons.appendChild(fwd);
+  buttons.appendChild(fwd);
 
   const speed = el('button', 'btn is-ghost cast-remote-speed', '1×');
   speed.type = 'button';
