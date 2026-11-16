@@ -140,8 +140,11 @@ jobs:
             - **MattStream-Windows-Setup.exe** - Windows installer, double-click to install
             - **MattStream-Windows-x64.zip** - portable Windows app, unzip and run MattStream.exe
 
-            On first launch the Android app asks for the address MattStream shows in its desktop app.
-            Both devices must be on the same Wi-Fi.
+            The Android apps open the library the build points at. To use another server, press Menu on a TV
+            remote (or use the app's picker) and enter the address the desktop app shows.
+
+            Any Chromecast TV on the same network can be cast to from the desktop app - nothing to install
+            on the TV. Both devices must be on the same Wi-Fi.
           files: |
             downloads/**/*.apk
             downloads/**/*.zip
