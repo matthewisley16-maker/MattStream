@@ -8,6 +8,12 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ## 2026-11-16
 
+### Fixed
+
+- **The app no longer guesses about the firewall** - the cast dialog used to tell you Windows Firewall was blocking
+  connections even after it had been allowed. The server now reports the rule's real state (read from Windows) and
+  warns only when it is genuinely blocked; `/api/network` carries `firewall: true/false`.
+
 ### Changed
 
 - **The Android apps open already connected** - a fresh install goes straight into the library at the

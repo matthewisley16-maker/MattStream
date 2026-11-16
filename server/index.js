@@ -7,7 +7,7 @@ const fsp = fs.promises;
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 
 const { Store } = require('./store');
 const { resolveFfmpeg, ffmpegWorks, buildPlayArgs } = require('./media');
@@ -158,6 +158,29 @@ function reindex() {
 
 // The quick tunnel's address is printed by cloudflared; the server reads it
 // straight from the log so the app can always show a reachable address.
+// Whether Windows actually lets other devices in. Asked of Windows rather than
+// assumed, so the app can never claim a block that is not there (or miss one).
+let firewallChecked = { at: 0, allowed: null };
+
+function firewallAllows() {
+  if (process.platform !== 'win32') return null;
+  if (Date.now() - firewallChecked.at < 30000) return firewallChecked.allowed;
+  let allowed = null;
+  try {
+    const out = execFileSync(
+      'netsh',
+      ['advfirewall', 'firewall', 'show', 'rule', 'name=MattStream-8096'],
+      { encoding: 'utf8', timeout: 4000, windowsHide: true }
+    );
+    if (/Action:\s*Allow/i.test(out)) allowed = /Enabled:\s*Yes/i.test(out);
+    else if (/Action:\s*Block/i.test(out)) allowed = false;
+  } catch (err) {
+    allowed = null;
+  }
+  firewallChecked = { at: Date.now(), allowed };
+  return allowed;
+}
+
 function tunnelUrl() {
   try {
     const saved = path.join(APP_ROOT, '.tools', 'public-url.txt');
@@ -1239,6 +1262,7 @@ async function handleApi(req, res, url) {
       port: currentPort,
       lan: lanUrls(currentPort),
       tunnel: tunnelUrl(),
+      firewall: firewallAllows(),
     });
   }
 

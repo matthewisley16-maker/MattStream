@@ -328,11 +328,14 @@ async function castTargets() {
   }
 }
 
+let castNetwork = null;
+
 async function castAddress() {
   try {
     const res = await fetch('/api/network', { cache: 'no-store' });
     if (!res.ok) return '';
     const data = await res.json();
+    castNetwork = data;
     if (data.tunnel) return data.tunnel;
     if (data.lan && data.lan.length) return data.lan[0];
   } catch (err) {
@@ -362,8 +365,8 @@ async function openCastMenu(item) {
         'div',
         'browser-empty',
         'No other screens are connected right now. A TV only shows up here while the MattStream TV app ' +
-          'is open on it and pointed at the address below. If it still will not connect, Windows Firewall ' +
-          'is blocking connections to this PC - allow MattStream through it once.'
+          'is open on it and pointed at the address below. If it still will not connect, check that Windows ' +
+          'Firewall allows MattStream on TCP port 8096.'
       )
     );
   } else {
@@ -408,6 +411,17 @@ async function openCastMenu(item) {
       list.appendChild(row);
     }
     body.appendChild(list);
+  }
+
+  if (castNetwork && castNetwork.firewall === false) {
+    body.appendChild(
+      el(
+        'p',
+        'hint cast-warn',
+        'Windows Firewall does not allow MattStream on port 8096, so no device can reach this server. ' +
+          'Allow it in Windows Security > Firewall & network protection > Allow an app through firewall.'
+      )
+    );
   }
 
   if (address) {

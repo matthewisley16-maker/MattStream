@@ -1322,3 +1322,5 @@ body.is-tv .card-play { opacity: 1; transform: none; }
   border-top: 1px solid var(--line);
 }
 .cast-address { font-size: 12px; padding: 4px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); }
+
+.cast-warn { color: #ffb3c1; }
