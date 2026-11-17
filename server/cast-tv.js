@@ -35,6 +35,8 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
   const devices = { at: 0, list: [] };
   const prepared = new Map(); // item id -> path of the AAC remux
   let preparing = null;
+  let preparation = null; // what is being prepared right now, for the app to show
+
 
   async function listDevices(force) {
     if (!force && Date.now() - devices.at < 20000 && devices.list.length) return devices.list;
@@ -97,6 +99,8 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
         ', converting audio'
     );
 
+    preparation = { title: item.title, startedAt: Date.now(), seconds: 0, percent: 0, fill: !!fill };
+
     const run = new Promise((resolve, reject) => {
       // "Fill" asks the set to stretch the picture to a 16:9 screen. The video
       // is still copied untouched; only the file's display aspect changes, which
@@ -116,12 +120,28 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
           '-b:a', '192k',
           '-ac', '2',
           '-movflags', '+faststart',
+          '-progress', 'pipe:1',
+          '-nostats',
           '-y',
           partial,
         ],
-        { stdio: ['ignore', 'ignore', 'pipe'] }
+        { stdio: ['ignore', 'pipe', 'pipe'] }
       );
       let error = '';
+      let progress = '';
+      const total = Number(item.duration) || 0;
+      child.stdout.on('data', (chunk) => {
+        progress += String(chunk);
+        const lines = progress.split('\n');
+        progress = lines.pop() || '';
+        for (const line of lines) {
+          const match = /^out_time=(\d+):(\d+):(\d+(?:\.\d+)?)$/.exec(line.trim());
+          if (!match || !preparation) continue;
+          const done = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+          preparation.seconds = Math.round(done);
+          preparation.percent = total > 0 ? Math.min(99, Math.round((done / total) * 100)) : 0;
+        }
+      });
       child.stderr.on('data', (chunk) => {
         error = String(chunk).trim().split('\n').slice(-2).join(' ');
       });
@@ -135,8 +155,16 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     preparing = run;
     try {
       await run;
+    } catch (err) {
+      try {
+        fs.rmSync(partial, { force: true });
+      } catch (cleanup) {
+        /* nothing to clear */
+      }
+      throw err;
     } finally {
       preparing = null;
+      preparation = null;
     }
     fs.renameSync(partial, out);
     prepared.set(item.id, out);
@@ -201,7 +229,26 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
       current = status;
     }
 
-    if (current.playerState === 'IDLE' || current.idleReason === 'ERROR') {
+    // A receiver can sit on LOADING with the title on screen and never start.
+    // Give it a few seconds, then take the fallback that always plays.
+    let settled = current;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const playerState = settled && settled.playerState;
+      if (playerState !== 'LOADING' && playerState !== 'BUFFERING') break;
+      if (Number(settled.currentTime) > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      try {
+        settled = (await session.playState()) || settled;
+      } catch (err) {
+        break;
+      }
+    }
+    current = settled;
+    const stuckLoading =
+      current &&
+      (current.playerState === 'LOADING' || current.playerState === 'BUFFERING') &&
+      !(Number(current.currentTime) > 0);
+    if (current.playerState === 'IDLE' || current.idleReason === 'ERROR' || stuckLoading) {
       log('the TV refused "' + item.title + '" as sent, transcoding it instead');
       const fallback = await session.load({
         url: base + '/api/play/' + encodeURIComponent(item.id) + '?force=1',
@@ -302,7 +349,20 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     sessions.clear();
   }
 
-  return { listDevices, cast, command, state, preparedFile, stopAll, sessions };
+  function reportsPreparation() {
+    return preparation;
+  }
+
+  return {
+    listDevices,
+    cast,
+    command,
+    state,
+    preparedFile,
+    preparation: reportsPreparation,
+    stopAll,
+    sessions,
+  };
 }
 
 module.exports = { makeCastTv };

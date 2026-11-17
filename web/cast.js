@@ -558,6 +558,26 @@ async function openCastMenu(item) {
       play.addEventListener('click', async () => {
         play.disabled = true;
         play.textContent = 'Starting...';
+        // Preparing a film for the set can take minutes on a slow disk. Say so,
+        // with the real position, instead of leaving a button that looks stuck.
+        let watched = false;
+        const progress = setInterval(async () => {
+          try {
+            const reply = await fetch('/api/cast/tv/preparing', { cache: 'no-store' });
+            const state = await reply.json();
+            if (!state.preparing) return;
+            const percent = state.preparing.percent;
+            play.textContent = percent
+              ? 'Preparing ' + percent + '%'
+              : 'Preparing ' + Math.max(1, Math.round((Date.now() - state.preparing.startedAt) / 1000)) + 's';
+            if (!watched) {
+              watched = true;
+              toast('Getting ' + item.title + ' ready for the TV - this happens once for this film');
+            }
+          } catch (err) {
+            /* the cast request itself reports real failures */
+          }
+        }, 1000);
         try {
           const res = await fetch('/api/cast/tv', {
             method: 'POST',
@@ -573,6 +593,8 @@ async function openCastMenu(item) {
           toast(err.message, true);
           play.disabled = false;
           play.textContent = 'Play on TV';
+        } finally {
+          clearInterval(progress);
         }
       });
       row.appendChild(play);

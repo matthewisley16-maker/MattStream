@@ -1326,6 +1326,11 @@ async function handleApi(req, res, url) {
     return streamFile(req, res, full, 'video/mp4', 'no-cache');
   }
 
+  // What the desktop app shows while a film is being made ready for a TV.
+  if (route === '/api/cast/tv/preparing') {
+    return sendJson(res, 200, { preparing: castTvs().preparation() || null });
+  }
+
   if (route === '/api/cast/targets') {
     const self = String(url.searchParams.get('client') || '');
     return sendJson(res, 200, {

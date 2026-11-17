@@ -43,6 +43,9 @@ public class MainActivity extends Activity {
     // leave it pointing at somewhere that no longer exists.
     private static final int SCAN_THREADS = 48;
     private static final int SCAN_TIMEOUT_MS = 700;
+    // How wide a window around this device to sweep. A /24 fits inside it, and on
+    // a /16 it looks nearby instead of walking sixty-five thousand addresses.
+    private static final int SCAN_WINDOW_BITS = 9;
 
     private FrameLayout root;
     private TvWebView web;
@@ -51,6 +54,7 @@ public class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private String serverUrl;
     private boolean searchedOnce = false;
+    private boolean searching = false;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -139,8 +143,14 @@ public class MainActivity extends Activity {
         return null;
     }
 
-    // Every usable address in this device's own subnet. It only uses the port
-    // the server already has open, so no firewall or network change is needed.
+    private static void addCandidate(java.util.Set<String> out, int value) {
+        out.add(((value >>> 24) & 255) + "." + ((value >>> 16) & 255) + "."
+                + ((value >>> 8) & 255) + "." + (value & 255));
+    }
+
+    // This device first, then a window around it inside its own subnet. It only
+    // uses the port the server already has open, so no firewall or network
+    // change is ever needed.
     private java.util.List<String> subnetAddresses() {
         java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
         try {
@@ -156,72 +166,104 @@ public class MainActivity extends Activity {
                     int ip = ((raw[0] & 255) << 24) | ((raw[1] & 255) << 16) | ((raw[2] & 255) << 8) | (raw[3] & 255);
                     int mask = 0xFFFFFFFF << (32 - prefix);
                     int network = ip & mask;
-                    int size = 1 << (32 - prefix);
-                    if (size > 1024) size = 1024;
-                    for (int i = 1; i < size - 1; i++) {
-                        int value = network + i;
-                        out.add(((value >>> 24) & 255) + "." + ((value >>> 16) & 255) + "."
-                                + ((value >>> 8) & 255) + "." + (value & 255));
-                    }
+                    int last = network | ~mask;
+                    int span = 1 << Math.min(32 - prefix, SCAN_WINDOW_BITS);
+                    int from = Math.max(network + 1, ip - span / 2);
+                    int to = Math.min(last - 1, ip + span / 2);
+                    addCandidate(out, ip);
+                    for (int value = from; value <= to; value++) addCandidate(out, value);
                 }
             }
-        } catch (Exception err) {
+        } catch (Throwable err) {
             // no usable address: the picker is all that is left
         }
         return new java.util.ArrayList<>(out);
     }
 
+    // Never throws: every way it can go wrong ends in "nothing found", which
+    // leaves the picker on screen rather than a spinner that never resolves.
     private String findServer() {
-        java.util.List<String> addresses = subnetAddresses();
-        final java.util.concurrent.atomic.AtomicReference<String> found =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        final java.util.concurrent.CountDownLatch done =
-                new java.util.concurrent.CountDownLatch(addresses.size());
-        java.util.concurrent.ExecutorService pool =
-                java.util.concurrent.Executors.newFixedThreadPool(SCAN_THREADS);
-        for (final String address : addresses) {
-            pool.execute(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        if (found.get() == null) {
-                            String url = probe(address);
-                            if (url != null) found.compareAndSet(null, url);
-                        }
-                    } finally {
-                        done.countDown();
-                    }
-                }
-            });
-        }
+        java.util.concurrent.ExecutorService pool = null;
         try {
-            done.await(5, java.util.concurrent.TimeUnit.SECONDS);
-        } catch (InterruptedException err) {
-            Thread.currentThread().interrupt();
+            java.util.List<String> addresses = subnetAddresses();
+            if (addresses.isEmpty()) return null;
+            final java.util.concurrent.atomic.AtomicReference<String> found =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            final java.util.concurrent.CountDownLatch done =
+                    new java.util.concurrent.CountDownLatch(addresses.size());
+            pool = java.util.concurrent.Executors.newFixedThreadPool(
+                    Math.min(SCAN_THREADS, addresses.size()));
+            for (final String address : addresses) {
+                try {
+                    pool.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                if (found.get() == null) {
+                                    String url = probe(address);
+                                    if (url != null) found.compareAndSet(null, url);
+                                }
+                            } catch (Throwable err) {
+                                // one address failing says nothing about the rest
+                            } finally {
+                                done.countDown();
+                            }
+                        }
+                    });
+                } catch (Throwable err) {
+                    done.countDown();
+                }
+            }
+            done.await(6, java.util.concurrent.TimeUnit.SECONDS);
+            return found.get();
+        } catch (Throwable err) {
+            return null;
+        } finally {
+            if (pool != null) {
+                try {
+                    pool.shutdownNow();
+                } catch (Throwable err) {
+                    // nothing left to stop
+                }
+            }
         }
-        pool.shutdownNow();
-        return found.get();
     }
 
     private void startServerSearch(final String message) {
+        if (searching) {
+            showSetup(message);
+            return;
+        }
+        searching = true;
         showSetup(message);
         new Thread(new Runnable() {
             @Override
             public void run() {
-                final String found = findServer();
+                String outcome;
+                try {
+                    outcome = findServer();
+                } catch (Throwable err) {
+                    outcome = null;
+                }
+                final String found = outcome;
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
+                        searching = false;
                         if (found != null) {
-                            serverUrl = found;
-                            rememberServer(found);
-                            loadServer(found);
-                        } else {
-                            showSetup("No MattStream server answered on this network.\n\nStart MattStream on "
-                                    + "the computer that holds your media, make sure both devices are on the same "
-                                    + "Wi-Fi, and allow it through Windows Firewall. You can also type its address "
-                                    + "below.");
+                            try {
+                                serverUrl = found;
+                                rememberServer(found);
+                                loadServer(found);
+                                return;
+                            } catch (Throwable err) {
+                                // anything at all here falls through to the picker
+                            }
                         }
+                        showSetup("No MattStream server answered on this network.\n\nStart MattStream on "
+                                + "the computer that holds your media, make sure both devices are on the same "
+                                + "Wi-Fi, and allow it through Windows Firewall. You can also type its address "
+                                + "below.");
                     }
                 });
             }
@@ -400,7 +442,14 @@ public class MainActivity extends Activity {
                 // before asking the viewer to type anything.
                 if (!searchedOnce) {
                     searchedOnce = true;
-                    startServerSearch("That address stopped answering. Looking for MattStream on this network...");
+                    // Leave this WebView callback before tearing the page down.
+                    v.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            startServerSearch(
+                                    "That address stopped answering. Looking for MattStream on this network...");
+                        }
+                    });
                     return;
                 }
                 showSetup("Could not reach " + target + ".\n\nStart MattStream on the desktop, make sure both "

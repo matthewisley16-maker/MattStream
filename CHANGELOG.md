@@ -10,6 +10,22 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ### Fixed
 
+- **A TV that sits on "loading" with the film's name now gets going** - a receiver can show the title and never start;
+  the server now watches for that and switches it to the live transcode instead of leaving it there. Testing showed the
+  media itself was served correctly (partial requests answered), so this is about the receiver giving up quietly.
+- **The server scan covers bigger networks and cannot fail** - it now asks this device's own address first and sweeps a
+  window around it (512 addresses), instead of the first 1024 of the subnet, so a /16 no longer misses the server. Every
+  failure path ends on the picker: a scan that finds nothing, a scan that cannot start, or a stale address that stops
+  answering all leave a usable screen, and only one scan runs at a time.
+
+### Added
+
+- **Progress while a film is made ready for the TV** - while the server copies a film for the set, *Play on TV* reads
+  *Preparing 37%* using ffmpeg's own progress, with a line explaining it happens once per film, so a slow first cast no
+  longer looks like nothing is happening.
+
+### Fixed
+
 - **The phone and TV apps find the server instead of an address baked into them** - they used to carry a literal
   address, so when the router handed this machine a different one the TV app sat on a spinner for ever and casting to it
   did nothing. On launch (and once more if a saved address stops answering) the app now looks across its own network for
