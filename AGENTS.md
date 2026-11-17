@@ -19,6 +19,9 @@ Android phone app and an Android TV app, all clients of the same server.
 - Never commit `data/`, `node_modules/`, `dist/` or `bin/ffmpeg.exe` (they are ignored on purpose).
 - No fake data anywhere: no placeholder movies, invented metadata, or a connection status the server
   did not actually report.
+- Never change this machine's network settings - adapter addresses, DNS, gateway, interface metric, firewall
+  rules or router configuration. Earlier a fixed IP on the Wi-Fi adapter broke every other network the PC joined.
+  If a change like that is ever needed, explain it and let the user run it.
 
 ## Builds
 

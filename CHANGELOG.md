@@ -22,8 +22,10 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
   ticked in its tray menu. The Startup shortcut and login item this PC had were removed, and turning the option off now
   also stops the watchdog loop that was already running (before, that loop kept relaunching the app until a reboot).
 - **Wi-Fi is no longer pinned to one address** - the network adapter had been left on a fixed 192.168.80.124 with fixed
-  DNS, which is why other Wi-Fi networks gave no internet and other devices could not reach this one. It goes back to
-  automatic addressing (DHCP) so every network works, and the app reads whatever address the machine actually has.
+  DNS, which is why other Wi-Fi networks gave no internet and other devices could not reach this one. It is back on
+  automatic addressing (DHCP), so every network hands it a working address; on this network it came back as
+  192.168.80.125, and the default address in the phone/TV apps and in `config/defaults.json` follows it. MattStream
+  itself never reads or writes the machine's network settings, and now may not change them at all.
 
 ## 2026-11-16
 

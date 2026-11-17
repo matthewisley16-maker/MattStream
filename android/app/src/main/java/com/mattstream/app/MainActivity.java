@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     // The library this build opens with, so a fresh install is already
     // connected. Anyone else can type their own address on the picker (Menu on
     // a TV remote, or automatically when this one cannot be reached).
-    private static final String DEFAULT_SERVER = "http://192.168.80.124:8096";
+    private static final String DEFAULT_SERVER = "http://192.168.80.125:8096";
 
     private FrameLayout root;
     private TvWebView web;
