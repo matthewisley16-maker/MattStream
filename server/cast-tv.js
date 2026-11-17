@@ -175,7 +175,7 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     const fillNeeded = fill && !alreadyWidescreen(item);
     if (needsAudioWork(item) || fillNeeded) {
       await prepare(item, fillNeeded);
-      url = base + '/api/cast/file/' + encodeURIComponent(item.id) + (fill ? '?fill=1' : '');
+      url = base + '/api/cast/file/' + encodeURIComponent(item.id) + (fillNeeded ? '?fill=1' : '');
       type = 'video/mp4';
       mode = 'remux';
     }
@@ -288,10 +288,13 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     const key = String(itemId).replace(/[^a-z0-9]/gi, '');
     const known = prepared.get(key) || prepared.get(itemId);
     if (known && fs.existsSync(known)) return known;
-    const guess = preparedPath(itemId, fill) || preparedPath(itemId, false);
-    const wanted = preparedPath(itemId, fill);
-    if (fs.existsSync(wanted)) return wanted;
-    return fs.existsSync(guess) ? guess : null;
+    if (fill) {
+      const filled = preparedPath(itemId, true);
+      if (fs.existsSync(filled)) return filled;
+    }
+    // A film already shaped like the screen is served from the plain remux.
+    const plain = preparedPath(itemId, false);
+    return fs.existsSync(plain) ? plain : null;
   }
 
   function stopAll() {
