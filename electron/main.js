@@ -4,6 +4,7 @@
 // window loads it directly - no browser, no address bar, no console window.
 const path = require('path');
 const http = require('http');
+const { execFileSync } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 const { app, BrowserWindow, Menu, dialog, shell, ipcMain, Tray, clipboard } = require('electron');
@@ -118,6 +119,28 @@ function watchdogShim() {
   );
 }
 
+// Turning the watchdog off has to stop the loop that is running right now, or
+// it would relaunch the app until the next reboot.
+function stopWatchdogLoop() {
+  try {
+    const target = watchdogScriptPath().replace(/'/g, "''");
+    execFileSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        "Get-CimInstance Win32_Process -Filter \"Name = 'powershell.exe'\" | " +
+          "Where-Object { $_.CommandLine -like '*" +
+          target +
+          "*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+      ],
+      { timeout: 8000, windowsHide: true }
+    );
+  } catch (err) {
+    /* nothing was running */
+  }
+}
+
 function setWatchdog(on) {
   try {
     const script = watchdogScriptPath();
@@ -127,8 +150,14 @@ function setWatchdog(on) {
       fs.writeFileSync(script, watchdogScript(), 'utf8');
       fs.writeFileSync(watchdogShimPath(), watchdogShim(), 'utf8');
     } else {
+      try {
+        fs.writeFileSync(pauseFile(), 'paused', 'utf8');
+      } catch (err) {
+        /* the loop stops below anyway */
+      }
       fs.rmSync(watchdogShimPath(), { force: true });
       fs.rmSync(script, { force: true });
+      stopWatchdogLoop();
     }
     return true;
   } catch (err) {

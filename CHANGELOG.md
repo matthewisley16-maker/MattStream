@@ -6,6 +6,25 @@ release page; the version number only moves when the app changes in a way worth 
 
 This file covers **MattStream only**. Nothing about AnyStreamSite belongs in this repository.
 
+## 2026-11-17
+
+### Added
+
+- **Fill the TV screen, or keep its own shape** - the cast menu now asks *Screen: Fit / Fill* next to the TVs on the
+  network. Fill stretches the picture across the whole screen; Fit leaves the film as it is, with black bars where its
+  shape does not match the set. The video is still copied untouched - only the file's display aspect changes - and the
+  choice is remembered. It only applies when the video has to be prepared for the TV (a remux); a file the set can take
+  as it is plays exactly as it always did, since the set itself decides how to frame it.
+
+### Fixed
+
+- **MattStream no longer starts with Windows by itself** - it only runs in the background when *Start with Windows* is
+  ticked in its tray menu. The Startup shortcut and login item this PC had were removed, and turning the option off now
+  also stops the watchdog loop that was already running (before, that loop kept relaunching the app until a reboot).
+- **Wi-Fi is no longer pinned to one address** - the network adapter had been left on a fixed 192.168.80.124 with fixed
+  DNS, which is why other Wi-Fi networks gave no internet and other devices could not reach this one. It goes back to
+  automatic addressing (DHCP) so every network works, and the app reads whatever address the machine actually has.
+
 ## 2026-11-16
 
 ### Added

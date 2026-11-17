@@ -1349,3 +1349,7 @@ body.is-tv .card-play { opacity: 1; transform: none; }
 }
 .cast-remote.no-frame { padding: 0; background: #000; backdrop-filter: none; }
 .cast-remote.no-frame .cast-remote-art { margin: 0; }
+
+.cast-screen-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; }
+.cast-screen-row .btn { padding: 6px 16px; font-size: 13px; }
+.cast-screen-row .btn.is-on { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.45); color: #fff; }

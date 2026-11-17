@@ -427,6 +427,26 @@ async function castTvDevices() {
   }
 }
 
+// Fill stretches the picture to the whole screen; Fit keeps the film's own
+// shape with black bars where it does not match. Remembered between casts.
+const CAST_FILL_KEY = 'mattstream-cast-fill';
+
+function castFillOn() {
+  try {
+    return localStorage.getItem(CAST_FILL_KEY) === 'fill';
+  } catch (err) {
+    return false;
+  }
+}
+
+function setCastFill(on) {
+  try {
+    localStorage.setItem(CAST_FILL_KEY, on ? 'fill' : 'fit');
+  } catch (err) {
+    /* private mode: the choice just will not persist */
+  }
+}
+
 async function openCastMenu(item) {
   const targets = await castTargets();
   const tvs = await castTvDevices();
@@ -498,6 +518,32 @@ async function openCastMenu(item) {
   }
 
   if (tvs.length) {
+    const screen = el('div', 'cast-screen-row');
+    screen.appendChild(el('span', 'hint', 'Screen:'));
+    const fit = el('button', 'btn is-ghost cast-screen-fit', 'Fit');
+    const fill = el('button', 'btn is-ghost cast-screen-fill', 'Fill');
+    fit.type = 'button';
+    fill.type = 'button';
+    fit.title = "Keep the film's own shape, with black bars where it does not match the screen";
+    fill.title = 'Stretch the picture to fill the whole screen';
+    const paintScreen = () => {
+      const on = castFillOn();
+      fill.classList.toggle('is-on', on);
+      fit.classList.toggle('is-on', !on);
+    };
+    fit.addEventListener('click', () => {
+      setCastFill(false);
+      paintScreen();
+    });
+    fill.addEventListener('click', () => {
+      setCastFill(true);
+      paintScreen();
+    });
+    paintScreen();
+    screen.appendChild(fit);
+    screen.appendChild(fill);
+    body.appendChild(screen);
+
     body.appendChild(el('h3', 'cast-section', 'TVs on your network'));
     const tvList = el('div', 'cast-list');
     for (const tv of tvs) {
@@ -516,7 +562,7 @@ async function openCastMenu(item) {
           const res = await fetch('/api/cast/tv', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ deviceId: tv.id, itemId: item.id }),
+            body: JSON.stringify({ deviceId: tv.id, itemId: item.id, fill: castFillOn() }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || 'Could not cast to that TV');

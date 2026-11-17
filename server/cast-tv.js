@@ -51,8 +51,9 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     return TYPES[ext] || 'video/mp4';
   }
 
-  function preparedPath(itemId) {
-    return path.join(dataDir, 'cast-tv', String(itemId).replace(/[^a-z0-9]/gi, '') + '.mp4');
+  function preparedPath(itemId, fill) {
+    const name = String(itemId).replace(/[^a-z0-9]/gi, '') + (fill ? '-fill' : '') + '.mp4';
+    return path.join(dataDir, 'cast-tv', name);
   }
 
   function needsAudioWork(item) {
@@ -61,8 +62,8 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     return !PLAYABLE_AUDIO.has(codec);
   }
 
-  async function prepare(item) {
-    const cached = preparedPath(item.id);
+  async function prepare(item, fill) {
+    const cached = preparedPath(item.id, fill);
     if (fs.existsSync(cached)) {
       prepared.set(item.id, cached);
       return cached;
@@ -77,9 +78,19 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     } catch (err) {
       /* nothing to clear */
     }
-    log('preparing "' + item.title + '" for the TV: copying video, converting audio');
+    log(
+      'preparing "' +
+        item.title +
+        '" for the TV: copying video' +
+        (fill ? ', filling a 16:9 screen' : '') +
+        ', converting audio'
+    );
 
     const run = new Promise((resolve, reject) => {
+      // "Fill" asks the set to stretch the picture to a 16:9 screen. The video
+      // is still copied untouched; only the file's display aspect changes, which
+      // is what a player uses to decide between black bars and filling.
+      const aspect = fill ? ['-aspect', '16:9'] : [];
       const child = spawn(
         resolveFfmpeg(),
         [
@@ -89,6 +100,7 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
           '-map', '0:v:0',
           '-map', '0:a:0?',
           '-c:v', 'copy',
+          ...aspect,
           '-c:a', 'aac',
           '-b:a', '192k',
           '-ac', '2',
@@ -121,7 +133,8 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     return out;
   }
 
-  async function cast(deviceId, item) {
+  async function cast(deviceId, item, options) {
+    const fill = !!(options && options.fill);
     const found = await listDevices(true);
     const device = found.find((entry) => entry.id === deviceId || entry.address === deviceId);
     if (!device) throw new Error('That TV is not answering on the network any more');
@@ -148,9 +161,9 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     let type = contentType(item);
     let mode = 'direct';
 
-    if (needsAudioWork(item)) {
-      await prepare(item);
-      url = base + '/api/cast/file/' + encodeURIComponent(item.id);
+    if (needsAudioWork(item) || fill) {
+      await prepare(item, fill);
+      url = base + '/api/cast/file/' + encodeURIComponent(item.id) + (fill ? '?fill=1' : '');
       type = 'video/mp4';
       mode = 'remux';
     }
@@ -163,6 +176,7 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
       name: device.name,
       duration: Number(item.duration) || 0,
       mode,
+      fill,
       // Reported so the app can warn about a silent set without touching it.
       volume,
     };
@@ -258,11 +272,13 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     }
   }
 
-  function preparedFile(itemId) {
+  function preparedFile(itemId, fill) {
     const key = String(itemId).replace(/[^a-z0-9]/gi, '');
     const known = prepared.get(key) || prepared.get(itemId);
     if (known && fs.existsSync(known)) return known;
-    const guess = preparedPath(itemId);
+    const guess = preparedPath(itemId, fill) || preparedPath(itemId, false);
+    const wanted = preparedPath(itemId, fill);
+    if (fs.existsSync(wanted)) return wanted;
     return fs.existsSync(guess) ? guess : null;
   }
 

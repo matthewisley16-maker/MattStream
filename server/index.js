@@ -1307,7 +1307,7 @@ async function handleApi(req, res, url) {
     const item = byId.get(String(body.itemId || ''));
     if (!item) return sendJson(res, 404, { error: 'Unknown video' });
     try {
-      const result = await castTvs().cast(String(body.deviceId || ''), item);
+      const result = await castTvs().cast(String(body.deviceId || ''), item, { fill: !!body.fill });
       return sendJson(res, 200, { ok: true, target: result.device.name });
     } catch (err) {
       return sendJson(res, 502, { error: err.message });
@@ -1317,7 +1317,7 @@ async function handleApi(req, res, url) {
   // The AAC remux the TV plays; it fetches this itself, so no key here.
   if (route.startsWith('/api/cast/file/')) {
     const id = decodeURIComponent(route.slice('/api/cast/file/'.length));
-    const full = castTvs().preparedFile(id);
+    const full = castTvs().preparedFile(id, String(url.searchParams.get('fill') || '') === '1');
     if (!full) return sendText(res, 404, 'This video is not prepared for the TV yet');
     return streamFile(req, res, full, 'video/mp4', 'no-cache');
   }
