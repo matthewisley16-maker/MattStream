@@ -1,6 +1,5 @@
 {
   "defaultServer": {
-    "name": "My Home Library",
-    "url": "http://192.168.80.125:8096/"
+    "name": "My Home Library"
   }
 }

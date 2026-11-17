@@ -56,6 +56,17 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     return path.join(dataDir, 'cast-tv', name);
   }
 
+  // A film already shaped like the screen needs no remux to fill it: the set
+  // has nothing to letterbox. Preparing one anyway meant a long encode before
+  // the TV was even given the film.
+  function alreadyWidescreen(item) {
+    const width = Number(item.width) || 0;
+    const height = Number(item.height) || 0;
+    if (!width || !height) return false;
+    const ratio = width / height;
+    return ratio > 1.6 && ratio < 1.9;
+  }
+
   function needsAudioWork(item) {
     const codec = String(item.audioCodec || '').toLowerCase();
     if (!codec) return false; // not probed: let the TV try the original
@@ -161,8 +172,9 @@ function makeCastTv({ dataDir, lanBase, log = () => {} }) {
     let type = contentType(item);
     let mode = 'direct';
 
-    if (needsAudioWork(item) || fill) {
-      await prepare(item, fill);
+    const fillNeeded = fill && !alreadyWidescreen(item);
+    if (needsAudioWork(item) || fillNeeded) {
+      await prepare(item, fillNeeded);
       url = base + '/api/cast/file/' + encodeURIComponent(item.id) + (fill ? '?fill=1' : '');
       type = 'video/mp4';
       mode = 'remux';

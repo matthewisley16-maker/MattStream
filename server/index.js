@@ -58,11 +58,15 @@ function readDefaults() {
   try {
     const parsed = JSON.parse(fs.readFileSync(DEFAULTS_FILE, 'utf8'));
     const server = parsed && parsed.defaultServer;
-    if (!server || !server.url) return { defaultServer: null };
+    if (!server) return { defaultServer: null };
+    // No address is written down here either: it follows whatever this machine
+    // has at the moment, so a new lease cannot leave a dead one behind.
+    const url = String(server.url || lanUrls(currentPort)[0] || '');
+    if (!url) return { defaultServer: null };
     return {
       defaultServer: {
         name: String(server.name || 'My Library'),
-        url: String(server.url),
+        url,
       },
     };
   } catch (err) {

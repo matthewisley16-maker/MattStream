@@ -38,10 +38,11 @@ public class MainActivity extends Activity {
     private static final int DEFAULT_PORT = 8096;
     private static final int MAX_SERVERS = 8;
 
-    // The library this build opens with, so a fresh install is already
-    // connected. Anyone else can type their own address on the picker (Menu on
-    // a TV remote, or automatically when this one cannot be reached).
-    private static final String DEFAULT_SERVER = "http://192.168.80.125:8096";
+    // No address is built in. The app asks the network it is on which machine
+    // is running MattStream, so a new DHCP lease or a different Wi-Fi cannot
+    // leave it pointing at somewhere that no longer exists.
+    private static final int SCAN_THREADS = 48;
+    private static final int SCAN_TIMEOUT_MS = 700;
 
     private FrameLayout root;
     private TvWebView web;
@@ -49,6 +50,7 @@ public class MainActivity extends Activity {
     private View fullscreenView;
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private String serverUrl;
+    private boolean searchedOnce = false;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -65,10 +67,10 @@ public class MainActivity extends Activity {
         // Open straight into the library. The picker is still one key away, and
         // appears by itself when this address stops answering.
         if (serverUrl.isEmpty()) {
-            serverUrl = DEFAULT_SERVER;
-            rememberServer(serverUrl);
+            startServerSearch("Looking for MattStream on this network...");
+        } else {
+            loadServer(serverUrl);
         }
-        loadServer(serverUrl);
     }
 
     /* ---------------- saved servers ---------------- */
@@ -104,6 +106,126 @@ public class MainActivity extends Activity {
     private int dp(float value) {
         return Math.round(TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics()));
+    }
+
+    /* ---------------- finding the server ---------------- */
+
+    // A MattStream server answers /api/status with JSON that names this
+    // machine. Nothing else on the network does, so that is the check.
+    private static String probe(String address) {
+        java.net.HttpURLConnection conn = null;
+        try {
+            java.net.URL url = new java.net.URL("http://" + address + ":8096/api/status");
+            conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(SCAN_TIMEOUT_MS);
+            conn.setReadTimeout(SCAN_TIMEOUT_MS);
+            conn.setUseCaches(false);
+            if (conn.getResponseCode() != 200) return null;
+            java.io.InputStream in = conn.getInputStream();
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[2048];
+            int read;
+            while ((read = in.read(buffer)) > 0 && out.size() < 8192) out.write(buffer, 0, read);
+            in.close();
+            String body = out.toString("UTF-8");
+            if (body.contains("\"serverName\"") && body.contains("\"port\"")) {
+                return "http://" + address + ":8096";
+            }
+        } catch (Exception err) {
+            return null;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+        return null;
+    }
+
+    // Every usable address in this device's own subnet. It only uses the port
+    // the server already has open, so no firewall or network change is needed.
+    private java.util.List<String> subnetAddresses() {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        try {
+            for (java.net.NetworkInterface nif
+                    : java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())) {
+                if (!nif.isUp() || nif.isLoopback()) continue;
+                for (java.net.InterfaceAddress ia : nif.getInterfaceAddresses()) {
+                    java.net.InetAddress addr = ia.getAddress();
+                    if (addr == null || addr.getAddress().length != 4) continue;
+                    int prefix = ia.getNetworkPrefixLength();
+                    if (prefix < 16 || prefix > 30) continue;
+                    byte[] raw = addr.getAddress();
+                    int ip = ((raw[0] & 255) << 24) | ((raw[1] & 255) << 16) | ((raw[2] & 255) << 8) | (raw[3] & 255);
+                    int mask = 0xFFFFFFFF << (32 - prefix);
+                    int network = ip & mask;
+                    int size = 1 << (32 - prefix);
+                    if (size > 1024) size = 1024;
+                    for (int i = 1; i < size - 1; i++) {
+                        int value = network + i;
+                        out.add(((value >>> 24) & 255) + "." + ((value >>> 16) & 255) + "."
+                                + ((value >>> 8) & 255) + "." + (value & 255));
+                    }
+                }
+            }
+        } catch (Exception err) {
+            // no usable address: the picker is all that is left
+        }
+        return new java.util.ArrayList<>(out);
+    }
+
+    private String findServer() {
+        java.util.List<String> addresses = subnetAddresses();
+        final java.util.concurrent.atomic.AtomicReference<String> found =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final java.util.concurrent.CountDownLatch done =
+                new java.util.concurrent.CountDownLatch(addresses.size());
+        java.util.concurrent.ExecutorService pool =
+                java.util.concurrent.Executors.newFixedThreadPool(SCAN_THREADS);
+        for (final String address : addresses) {
+            pool.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (found.get() == null) {
+                            String url = probe(address);
+                            if (url != null) found.compareAndSet(null, url);
+                        }
+                    } finally {
+                        done.countDown();
+                    }
+                }
+            });
+        }
+        try {
+            done.await(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException err) {
+            Thread.currentThread().interrupt();
+        }
+        pool.shutdownNow();
+        return found.get();
+    }
+
+    private void startServerSearch(final String message) {
+        showSetup(message);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final String found = findServer();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (found != null) {
+                            serverUrl = found;
+                            rememberServer(found);
+                            loadServer(found);
+                        } else {
+                            showSetup("No MattStream server answered on this network.\n\nStart MattStream on "
+                                    + "the computer that holds your media, make sure both devices are on the same "
+                                    + "Wi-Fi, and allow it through Windows Firewall. You can also type its address "
+                                    + "below.");
+                        }
+                    }
+                });
+            }
+        }).start();
     }
 
     /* ---------------- setup screen ---------------- */
@@ -171,7 +293,7 @@ public class MainActivity extends Activity {
         }
 
         final EditText input = new EditText(this);
-        input.setHint("192.168.1.24:8096");
+        input.setHint("address the desktop app shows");
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         input.setTextColor(Color.WHITE);
@@ -179,8 +301,7 @@ public class MainActivity extends Activity {
         input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         input.setImeOptions(EditorInfo.IME_ACTION_GO);
         if (!serverUrl.isEmpty()) input.setText(serverUrl);
-        else if (!known.isEmpty()) input.setText("");
-        else input.setText(DEFAULT_SERVER);
+        else input.setText("");
         column.addView(input, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -275,13 +396,11 @@ public class MainActivity extends Activity {
                 if (failingUrl == null) return;
                 if (!failingUrl.startsWith(target)) return;
                 // A saved address can be an IP the router has since handed to
-                // something else. Try the address this build ships with once
+                // something else. Look for the server on this network once
                 // before asking the viewer to type anything.
-                String fallback = normalize(DEFAULT_SERVER);
-                if (!target.equals(fallback)) {
-                    serverUrl = fallback;
-                    rememberServer(fallback);
-                    loadServer(fallback);
+                if (!searchedOnce) {
+                    searchedOnce = true;
+                    startServerSearch("That address stopped answering. Looking for MattStream on this network...");
                     return;
                 }
                 showSetup("Could not reach " + target + ".\n\nStart MattStream on the desktop, make sure both "

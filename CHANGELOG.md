@@ -8,6 +8,19 @@ This file covers **MattStream only**. Nothing about AnyStreamSite belongs in thi
 
 ## 2026-11-17
 
+### Fixed
+
+- **The phone and TV apps find the server instead of an address baked into them** - they used to carry a literal
+  address, so when the router handed this machine a different one the TV app sat on a spinner for ever and casting to it
+  did nothing. On launch (and once more if a saved address stops answering) the app now looks across its own network for
+  the server's status page - only on the port MattStream already has open, so nothing on the machine changes - and opens
+  whatever it finds. The picker still lists servers used before and accepts a typed address.
+- **Fill no longer forces a long remux** - choosing *Fill* on a film that is already the shape of the screen used to
+  prepare a whole second copy before the TV was given anything, which looked exactly like a cast that never starts. It
+  now plays straight away; only a picture that genuinely is not widescreen is prepared.
+- `scripts/restore-wifi.cmd` is gone, and `config/defaults.json` no longer stores an address - the default library
+  reports whatever this machine has at the time.
+
 ### Added
 
 - **Fill the TV screen, or keep its own shape** - the cast menu now asks *Screen: Fit / Fill* next to the TVs on the
